@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel — Knowledge Base</title>
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<main>
+  <h1>Knowledge Base</h1>
+  <p class="subtitle">The policies, playbooks, and historical cases Sentinel's agents consult.</p>
+
+  <div class="tabs">
+    <button data-tab="policies" class="active">Policies</button>
+    <button data-tab="playbooks">Playbooks</button>
+    <button data-tab="cases">Historical Cases</button>
+  </div>
+
+  <div class="split">
+    <div class="card list-pane" id="list"></div>
+    <div class="card doc" id="doc"><div class="empty">Select a document</div></div>
+  </div>
+</main>
+
+<script src="/assets/shared.js"></script>
+<script>
+renderNav('knowledge');
+
+let index = null;
+let tab = 'policies';
+
+document.querySelectorAll('.tabs button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    tab = b.dataset.tab;
+    renderList();
+  });
+});
+
+function renderList() {
+  const list = document.getElementById('list');
+  document.getElementById('doc').innerHTML = '<div class="empty">Select a document</div>';
+  if (tab === 'cases') {
+    list.innerHTML = index.cases.map((c) => `
+      <div class="item" data-id="${esc(c.case_id)}">
+        <span class="mono">${esc(c.case_id)}</span> · ${esc(c.category)}
+      </div>`).join('');
+    list.querySelectorAll('.item').forEach((el) => {
+      el.addEventListener('click', () => { selectItem(el); showCase(el.dataset.id); });
+    });
+  } else {
+    list.innerHTML = index[tab].map((d) => `
+      <div class="item" data-slug="${esc(d.slug)}">${esc(d.title.replace(/^(Policy|Team Playbook):\s*/, ''))}</div>`).join('');
+    list.querySelectorAll('.item').forEach((el) => {
+      el.addEventListener('click', () => { selectItem(el); showDoc(tab, el.dataset.slug); });
+    });
+  }
+}
+
+function selectItem(el) {
+  el.parentElement.querySelectorAll('.item').forEach((x) => x.classList.remove('active'));
+  el.classList.add('active');
+}
+
+async function showDoc(type, slug) {
+  const doc = await fetchJSON(`/api/knowledge/${type}/${slug}`);
+  document.getElementById('doc').innerHTML = renderMarkdown(doc.content);
+}
+
+async function showCase(id) {
+  const c = await fetchJSON(`/api/knowledge/cases/${id}`);
+  document.getElementById('doc').innerHTML = `
+    <h1>${esc(c.case_id)}</h1>
+    <dl class="kv">
+      <dt>Category</dt><dd>${esc(c.category)}</dd>
+      <dt>Priority</dt><dd>${priorityBadge(c.priority)}</dd>
+      <dt>Assigned Team</dt><dd>${esc(c.assigned_team)}</dd>
+      <dt>Policy</dt><dd>${esc(c.policy_reference)}</dd>
+      <dt>Resolution Time</dt><dd>${esc(c.resolution_time)}</dd>
+      <dt>Resolved On</dt><dd>${esc(c.resolved_on)}</dd>
+    </dl>
+    <h2>Customer Complaint</h2><p>${esc(c.customer_complaint)}</p>
+    <h2>Investigation Findings</h2><p>${esc(c.investigation_findings)}</p>
+    <h2>Resolution</h2><p>${esc(c.resolution)}</p>`;
+}
+
+fetchJSON('/api/knowledge').then((i) => { index = i; renderList(); });
+</script>
+</body>
+</html>

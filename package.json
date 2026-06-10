@@ -1,0 +1,28 @@
+{
+  "name": "sentinel",
+  "version": "1.0.0",
+  "description": "Multi-agent AI copilot for credit card support operations, built with Flue",
+  "scripts": {
+    "dev": "flue dev --target node",
+    "build": "flue build --target node",
+    "typecheck": "tsc --noEmit",
+    "resolve": "flue run resolve-complaint --target node --payload",
+    "start": "flue build --target node && PORT=3583 node --env-file=.env dist/server.mjs",
+    "serve": "node --env-file=.env dist/server.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@flue/runtime": "^0.11.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "hono": "^4.12.25",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@flue/cli": "^0.11.0",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3"
+  }
+}

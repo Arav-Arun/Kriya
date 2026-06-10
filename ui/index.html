@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel — Assistant</title>
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<main>
+  <h1>Assistant</h1>
+  <p class="subtitle">Describe a customer issue. Sentinel's agents will classify it, investigate, check policy, find precedents, and route it.</p>
+
+  <div class="card">
+    <h2>Customer Complaint</h2>
+    <textarea id="complaint" placeholder="e.g. Customer reports duplicate Amazon charge. Customer ID: 1234"></textarea>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+      <button class="primary" id="run">Run Analysis</button>
+      <span id="run-status" style="color:var(--muted);font-size:13px"></span>
+    </div>
+    <div class="samples-label">Try out these example usecases:</div>
+    <div class="samples">
+      <button class="ghost sample">Customer reports duplicate Amazon charge. Customer ID: 1234</button>
+      <button class="ghost sample">Customer 1110 says there are several online purchases overnight they never made.</button>
+      <button class="ghost sample">Customer 1543's card was declined at Myntra even though they say the bill is paid.</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Workflow Execution</h2>
+      <div class="timeline" id="timeline"></div>
+    </div>
+    <div id="result-col" style="display:none">
+      <div class="card" id="outcome-card" hidden>
+        <h2>Outcome</h2>
+        <div id="outcome"></div>
+        <div style="margin-top:14px" id="ticket-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail-cards"></div>
+</main>
+
+<script src="/assets/shared.js"></script>
+<script>
+renderNav('assistant');
+
+const STAGES = [
+  ['triage', 'Triage Agent'],
+  ['investigation', 'Investigation Agent'],
+  ['policy', 'Policy Agent'],
+  ['similar-cases', 'Similar Cases Agent'],
+  ['routing', 'Routing Agent'],
+  ['ticket', 'Ticket Agent'],
+];
+
+const timeline = document.getElementById('timeline');
+const runBtn = document.getElementById('run');
+const runStatus = document.getElementById('run-status');
+const complaintEl = document.getElementById('complaint');
+let analysis = null;
+let eventSource = null;
+
+function resetTimeline() {
+  timeline.innerHTML = STAGES.map(([id, label]) => `
+    <div class="step" id="step-${id}">
+      <div class="dot"></div>
+      <div><div class="label">${label}</div><div class="detail" id="detail-${id}"></div></div>
+    </div>`).join('');
+  document.getElementById('outcome-card').hidden = true;
+  document.getElementById('result-col').style.display = 'none';
+  document.querySelector('.cols').classList.remove('has-results');
+  document.getElementById('detail-cards').innerHTML = '';
+  document.getElementById('ticket-area').innerHTML = '';
+}
+resetTimeline();
+
+function setStep(stage, status, detail) {
+  const el = document.getElementById(`step-${stage}`);
+  if (!el) return;
+  el.classList.remove('running', 'done', 'error');
+  if (status) el.classList.add(status);
+  if (detail !== undefined) document.getElementById(`detail-${stage}`).textContent = detail;
+}
+
+function stageDetail(stage, output) {
+  if (!output) return '';
+  switch (stage) {
+    case 'triage': return `${output.category} · ${output.priority}${output.customer_id ? ` · Customer ${output.customer_id}` : ''}`;
+    case 'investigation': return `${output.matching_transactions?.length ?? 0} matching transactions · ${output.evidence?.length ?? 0} evidence items`;
+    case 'policy': return `${output.policy_id} · ${output.eligibility} · SLA ${output.sla}`;
+    case 'similar-cases': return `${output.cases?.length ?? 0} similar cases found`;
+    case 'routing': return `${output.assigned_team}`;
+    case 'ticket': return `${output.ticket_id} created`;
+    default: return '';
+  }
+}
+
+document.querySelectorAll('.sample').forEach((b) => {
+  b.addEventListener('click', () => { complaintEl.value = b.textContent.trim(); });
+});
+
+runBtn.addEventListener('click', async () => {
+  const complaint = complaintEl.value.trim();
+  if (!complaint) { complaintEl.focus(); return; }
+  runBtn.disabled = true;
+  runStatus.textContent = 'Starting workflow…';
+  analysis = null;
+  resetTimeline();
+  eventSource?.close();
+
+  try {
+    const { runId } = await fetchJSON('/workflows/resolve-complaint', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ complaint }),
+    });
+    runStatus.textContent = `Run ${runId.split(':').pop()}`;
+    watchRun(runId, complaint);
+  } catch (err) {
+    runStatus.textContent = '';
+    showError(String(err));
+    runBtn.disabled = false;
+  }
+});
+
+function watchRun(runId, complaint) {
+  eventSource = new EventSource(`/runs/${encodeURIComponent(runId)}?offset=-1&live=sse`);
+  eventSource.addEventListener('data', (e) => {
+    for (const ev of JSON.parse(e.data)) handleEvent(ev, complaint);
+  });
+  eventSource.onerror = () => {};
+}
+
+function handleEvent(ev, complaint) {
+  if (ev.type === 'log' && ev.message === 'stage') {
+    const { stage, status, output, message } = ev.attributes ?? {};
+    if (status === 'running') setStep(stage, 'running', 'working…');
+    if (status === 'done') setStep(stage, 'done', stageDetail(stage, output));
+    if (status === 'error') setStep(stage, 'error', message ?? 'failed');
+  }
+  if (ev.type === 'run_end') {
+    eventSource?.close();
+    runBtn.disabled = false;
+    if (ev.isError) {
+      runStatus.textContent = '';
+      showError(typeof ev.error === 'string' ? ev.error : JSON.stringify(ev.error));
+      return;
+    }
+    analysis = ev.result;
+    runStatus.textContent = 'Analysis complete';
+    renderOutcome(complaint);
+  }
+}
+
+function showError(msg) {
+  document.getElementById('detail-cards').innerHTML =
+    `<div class="card"><div class="error-box">${esc(msg)}</div></div>`;
+}
+
+function renderOutcome(complaint) {
+  const { triage, investigation, policy, similar_cases, routing } = analysis;
+  document.getElementById('outcome-card').hidden = false;
+  document.getElementById('result-col').style.display = '';
+  document.querySelector('.cols').classList.add('has-results');
+  document.getElementById('outcome').innerHTML = `
+    <dl class="kv">
+      <dt>Issue Category</dt><dd><span class="badge">${esc(triage.category)}</span></dd>
+      <dt>Priority</dt><dd>${priorityBadge(routing.priority)}</dd>
+      <dt>Eligibility</dt><dd>${esc(policy.eligibility)} · SLA ${esc(policy.sla)}</dd>
+      <dt>Similar Cases</dt><dd>${similar_cases.cases.length} found</dd>
+      <dt>Assigned Team</dt><dd><strong>${esc(routing.assigned_team)}</strong></dd>
+      <dt>Escalation</dt><dd>${esc(routing.escalation_path)}</dd>
+    </dl>`;
+  document.getElementById('ticket-area').innerHTML =
+    `<button class="primary" id="create-ticket">Create Ticket</button> <span id="ticket-status" style="color:var(--muted);font-size:13px"></span>`;
+  document.getElementById('create-ticket').addEventListener('click', () => createTicket(complaint));
+
+  document.getElementById('detail-cards').innerHTML = `
+    <div class="card">
+      <h2>Investigation Summary</h2>
+      <p style="margin:0 0 8px">${esc(investigation.notes)}</p>
+      <ul class="evidence">${investigation.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>
+      ${investigation.matching_transactions.length ? `
+        <div class="table-container" style="margin-top:8px">
+          <table><thead>
+            <tr><th>Transaction</th><th>Time</th><th>Merchant</th><th>Amount</th><th>Status</th></tr>
+          </thead><tbody>
+            ${investigation.matching_transactions.map((t) => `
+              <tr><td class="mono">${esc(t.id)}</td><td class="mono">${esc(t.timestamp.replace('T', ' ').replace('Z', ''))}</td>
+              <td>${esc(t.merchant)}</td><td>${esc(t.currency)} ${t.amount.toLocaleString('en-IN')}</td>
+              <td>${esc(t.status)}</td></tr>`).join('')}
+          </tbody></table>
+        </div>` : ''}
+    </div>
+    <div class="card">
+      <h2>Policy — ${esc(policy.policy_id)} ${esc(policy.policy_name)}</h2>
+      <p style="margin:0 0 8px">${esc(policy.rationale)}</p>
+      <dl class="kv">
+        <dt>Required documents</dt><dd>${policy.required_documents.map(esc).join('; ') || '—'}</dd>
+        <dt>Required actions</dt><dd>${policy.required_actions.map(esc).join('; ') || '—'}</dd>
+        <dt>Escalation required</dt><dd>${policy.escalation_required ? 'Yes' : 'No'}</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h2>Similar Historical Cases</h2>
+      ${similar_cases.cases.map((c) => `
+        <p style="margin:6px 0"><span class="badge grey">${esc(c.case_id)}</span>
+        ${esc(c.similarity)}<br>
+        <span style="color:var(--muted)">Resolution: ${esc(c.resolution)} (${esc(c.resolution_time)})</span></p>`).join('')}
+      <p style="margin:10px 0 0"><strong>Common resolution:</strong> ${esc(similar_cases.common_resolution)}</p>
+      <p style="margin:4px 0 0"><strong>Recommended next action:</strong> ${esc(similar_cases.recommended_next_action)}</p>
+    </div>`;
+}
+
+async function createTicket(complaint) {
+  const btn = document.getElementById('create-ticket');
+  const status = document.getElementById('ticket-status');
+  btn.disabled = true;
+  status.textContent = 'Ticket Agent working…';
+  setStep('ticket', 'running', 'working…');
+  try {
+    const res = await fetchJSON('/workflows/create-ticket?wait=result', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ complaint, analysis }),
+    });
+    const ticket = res.result?.ticket ?? res.ticket ?? res;
+    setStep('ticket', 'done', `${ticket.id} created`);
+    status.textContent = '';
+    document.getElementById('ticket-area').innerHTML =
+      `<div class="success-box">Ticket Created: ${esc(ticket.id)} → ${esc(ticket.assigned_team)}
+       &nbsp;·&nbsp; <a href="/tickets">View in Open Tickets</a></div>`;
+  } catch (err) {
+    setStep('ticket', 'error', 'failed');
+    status.textContent = '';
+    btn.disabled = false;
+    showError(String(err));
+  }
+}
+</script>
+</body>
+</html>

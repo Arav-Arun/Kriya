@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# SQLite databases & sidecars
+data/.flue.db
+data/.flue.db-shm
+data/.flue.db-wal
+data/.sentinel.db
+data/.sentinel.db-shm
+data/.sentinel.db-wal
+
+# Claude / AI metadata
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
