@@ -1,8 +1,8 @@
 # Sentinel
 
-**An AI-powered support copilot for credit card operations** — built with the [Flue](https://flueframework.com) multi-agent framework.
+**An AI-powered support copilot for credit card operations** built with the Flue multi agent framework.
 
-A support employee types a customer complaint in plain English. Sentinel's six AI agents work together — classifying the issue, pulling customer data, checking bank policies, finding past precedents, and routing it to the right team — then generate a structured, ready-to-act support ticket. The entire pipeline runs in seconds.
+A support employee types a customer complaint in plain English. Sentinel's six AI agents work together - classifying the issue, pulling customer data, checking bank policies, finding past precedents, and routing it to the right team - then generate a structured, ready-to-act support ticket. The entire pipeline runs in seconds.
 
 ---
 
@@ -17,7 +17,7 @@ Complaint → Triage → Investigation → Policy → Similar Cases → Routing 
 | Agent | What it does |
 |---|---|
 | **Triage** | Reads the complaint and classifies it (Duplicate Charge, Fraud, Merchant Dispute, etc.), sets priority, and extracts entities like customer ID, merchant name, and amounts. |
-| **Investigation** | Uses tools to pull the customer's profile and recent transactions from the database. Identifies suspicious patterns — duplicate charges seconds apart, overnight fraud bursts, declined cards — and lists concrete evidence. |
+| **Investigation** | Uses tools to pull the customer's profile and recent transactions from the database. Identifies suspicious patterns - duplicate charges seconds apart, overnight fraud bursts, declined cards — and lists concrete evidence. |
 | **Policy** | Searches the bank's internal policy documents to find the governing policy, checks eligibility rules against the evidence, and extracts the SLA, required documents, and resolution steps. |
 | **Similar Cases** | Searches 100 resolved historical cases to find precedents with the same failure pattern. Reports what resolution worked before and recommends a next action. |
 | **Routing** | Determines the owning team (Disputes Ops, Fraud Ops, Card Ops, etc.) using the team playbooks, confirms priority against the playbook's matrix, and sets the escalation path. |
@@ -28,12 +28,11 @@ Each agent is defined in [`src/sentinel/agents.ts`](src/sentinel/agents.ts) with
 ---
 
 ## The UI
-
 Three pages, all served from a lightweight Hono server:
 
-- **Assistant** (`/`) — Enter a complaint, watch each agent execute in real time via SSE, then create the ticket.
-- **Open Tickets** (`/tickets`) — Browse generated tickets with full evidence, policy references, and recommendations.
-- **Knowledge Base** (`/knowledge`) — Explore the policies, team playbooks, and historical cases the agents consult.
+- **Assistant** (`/`) - Enter a complaint, watch each agent execute in real time via SSE, then create the ticket.
+- **Open Tickets** (`/tickets`) - Browse generated tickets with full evidence, policy references, and recommendations.
+- **Knowledge Base** (`/knowledge`) - Explore the policies, team playbooks, and historical cases the agents consult.
 
 ---
 
@@ -47,6 +46,7 @@ Sentinel's dynamic business data is stored in a Supabase PostgreSQL database. Th
 - **12 internal policies** covering dispute resolution, fraud handling, chargebacks, EMI, rewards, etc. (local markdown)
 - **5 team playbooks** with priority matrices and escalation rules (local markdown)
 
+Note: This data is synthesised. A further improvement would be the use real API calls for data
 ---
 
 ## Quick Start
@@ -80,9 +80,6 @@ For development with hot reload:
 ```bash
 npm run dev
 ```
-
-> **Note:** The dev watcher rebuilds on file changes, which can interrupt in-flight workflow runs. Use `npm start` when demoing.
-
 ---
 
 ## Project Structure
@@ -102,7 +99,7 @@ src/
   app.ts               # Hono HTTP server (UI + API + Flue routes)
   db.ts                # Flue runtime persistence
 
-ui/                    # Static frontend (HTML + CSS + JS)
+ui/                    # Frontend (HTML + CSS + JS)
 knowledge/             # Policies, playbooks, historical cases (Markdown + JSON)
 ```
 
@@ -112,28 +109,8 @@ knowledge/             # Policies, playbooks, historical cases (Markdown + JSON)
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | — | Required. Your OpenAI API key. |
-| `NEXT_PUBLIC_SUPABASE_URL` | — | Required. Your Supabase project URL. |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Required. Your Supabase service role key (bypasses RLS for backend tools). |
+| `OPENAI_API_KEY` | N.A. | Required. Your OpenAI API key. |
+| `NEXT_PUBLIC_SUPABASE_URL` | N.A. | Required. Your Supabase project URL. |
+| `SUPABASE_SERVICE_ROLE_KEY` | N.A. | Required. Your Supabase service role key (bypasses RLS for backend tools). |
 | `SENTINEL_MODEL` | `openai/gpt-5.5` | Model for all agents. Any [Pi model specifier](https://pi.dev/models) works (e.g. `anthropic/claude-sonnet-4-6`). |
 | `PORT` | `3583` | Server port. |
-
----
-
-## CLI Usage
-
-```bash
-# Run the pipeline headlessly
-npx flue run resolve-complaint --target node \
-  --payload '{"complaint":"Customer reports duplicate Amazon charge. Customer ID: 1234"}'
-```
-
----
-
-## Built With
-
-- [Flue](https://flueframework.com) — Multi-agent orchestration framework
-- [Hono](https://hono.dev) — Lightweight HTTP server
-- [Valibot](https://valibot.dev) — Schema validation for structured agent outputs
-- OpenAI GPT — Language model powering all six agents
-- Supabase PostgreSQL — Secure cloud database backend
