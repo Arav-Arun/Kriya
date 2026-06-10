@@ -1,6 +1,6 @@
-// Final pipeline stage (docs/04_WORKFLOWS.md step 6): the Ticket Agent turns
-// the resolve-complaint analysis into a stored, structured support ticket.
-// Invoked by the UI's "Create Ticket" button with the analysis payload.
+// Create Ticket workflow: the Ticket Agent turns the resolve-complaint
+// analysis into a stored, structured support ticket.
+// Invoked by the UI's "Create Ticket" button with the analysis payload after human review/approval.
 import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
 import { ticketAgent } from '../sentinel/agents.ts';
 import { TicketResult } from '../sentinel/schemas.ts';

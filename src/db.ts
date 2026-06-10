@@ -1,9 +1,9 @@
 import { sqlite } from '@flue/runtime/node';
+import { postgres } from '@flue/postgres';
 
 // Flue runtime state: agent sessions, submissions, workflow runs and events.
-// Business data (customers, transactions, cases, tickets) lives in
-// data/.sentinel.db — see src/lib/sentinel-db.ts.
-// The dot-prefixed filename keeps the SQLite files (and their -shm/-wal
-// sidecars) out of `flue dev`'s file watcher, which would otherwise rebuild
-// in a loop on every database write.
-export default sqlite('./data/.flue.db');
+// Uses Supabase Postgres for durability across deploys and restarts.
+// Fallback to SQLite locally if DATABASE_URL is not set.
+export default process.env.DATABASE_URL
+  ? postgres(process.env.DATABASE_URL)
+  : sqlite('./data/.flue.db');

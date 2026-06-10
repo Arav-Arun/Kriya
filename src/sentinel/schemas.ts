@@ -75,6 +75,21 @@ export const RoutingResult = v.object({
 });
 export type RoutingResult = v.InferOutput<typeof RoutingResult>;
 
+export const EscalationReviewResult = v.object({
+  required_approver: v.string(),
+  reason: v.string(),
+  escalation_action: v.string(),
+  customer_impact: v.string(),
+});
+export type EscalationReviewResult = v.InferOutput<typeof EscalationReviewResult>;
+
+export const MissingInfoResult = v.object({
+  missing_documents: v.array(v.string()),
+  customer_facing_request: v.string(),
+  can_continue: v.boolean(),
+});
+export type MissingInfoResult = v.InferOutput<typeof MissingInfoResult>;
+
 export const TicketResult = v.object({
   ticket_id: v.string(),
 });

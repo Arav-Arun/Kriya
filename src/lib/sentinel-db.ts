@@ -1,6 +1,4 @@
-// Business database for Sentinel: customers, transactions, historical cases,
-// and tickets.  Backed by Supabase (PostgreSQL) via @supabase/supabase-js.
-// Migrated from the original node:sqlite DatabaseSync implementation.
+// Business database for Sentinel: customers, transactions, historical cases,and tickets backed by Supabase (PostgreSQL) via @supabase/supabase-js.
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -14,8 +12,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ---------------------------------------------------------------- queries
-
+// queries
 export interface Customer {
   id: number;
   name: string;
@@ -188,8 +185,7 @@ export async function listTickets() {
   return data ?? [];
 }
 
-// ---------------------------------------------------------------- utilities
-
+// utilities
 export function tokenize(text: string): string[] {
   const stop = new Set([
     'the', 'and', 'for', 'with', 'was', 'were', 'this', 'that',

@@ -1,5 +1,4 @@
 // Markdown knowledge base access: policies and team playbooks.
-// Documents are loaded once at startup; the corpus is small (17 files).
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { tokenize } from './sentinel-db.ts';

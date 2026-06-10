@@ -1,29 +1,117 @@
 # Sentinel
 
-**An AI-powered support copilot for credit card operations** built with the Flue multi agent framework.
+**An AI-powered support copilot for credit card operations** built with the Flue multi-agent framework.
 
-A support employee types a customer complaint in plain English. Sentinel's six AI agents work together - classifying the issue, pulling customer data, checking bank policies, finding past precedents, and routing it to the right team - then generate a structured, ready-to-act support ticket. The entire pipeline runs in seconds.
+A support employee types a customer complaint in plain English. Sentinel's specialized AI agents analyze the issue in a read-only workflow — classifying it, pulling customer data, checking bank policies, finding past precedents, and routing it to the right team. After human review and approval, a second workflow runs the Ticket Agent to generate and store a structured, ready-to-act support ticket.
 
 ---
 
 ## How It Works
 
-Sentinel orchestrates **six specialised agents** in a pipeline. Each agent has a single job, its own tools, and produces a validated result that feeds the next stage:
+Sentinel orchestrates **8 specialized agents** across two workflows. The first analyzes and routes; the second writes.
 
 ```
-Complaint → Triage → Investigation → Policy → Similar Cases → Routing → Ticket
+                        ┌─────────────────────┐
+                        │   Customer Complaint│
+                        └──────────┬──────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │    Triage Agent     │  ← classify, extract entities
+                        └──────────┬──────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              │  customer found    │                     │  no ID / not found
+    ┌─────────▼──────────┐         │       ┌────────────▼────────────┐
+    │ Investigation Agent│         │       │  Investigation Bypass   │
+    │  (pull txns, find  │         │       │  (skip — no data to     │
+    │   evidence)        │         │       │   investigate)          │
+    └─────────┬──────────┘         │       └────────────┬────────────┘
+              └────────────────────┼────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │         in parallel         │
+          ┌─────────▼─────────┐        ┌──────────▼──────────┐
+          │   Policy Agent    │        │ Similar Cases Agent │
+          │ (find policy, SLA,│        │ (search 100 resolved│
+          │  eligibility)     │        │ cases for precedent)│
+          └─────────┬─────────┘        └──────────┬──────────┘
+                    └──────────────┬──────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │ escalation required    │ needs more info        │  standard
+ ┌────────▼─────────┐   ┌──────────▼──────────┐             │
+ │ Escalation Review│   │ Missing Information │             │
+ │ (approver, reason│   │ (list missing docs, │             │
+ │  impact)         │   │  draft request)     │             │
+ └────────┬─────────┘   └──────────┬──────────┘             │
+          └────────────────────────┼────────────────────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │   Routing Agent     │  ← assign team, set priority
+                        └──────────┬──────────┘
+                                   │
+                   ─ ─ ─ ─ ─ ─ ─ ─ ┼ ─ ─ ─ ─ ─ ─ ─ ─  Workflow 1 ends
+                                   │
+                        ┌──────────▼──────────┐
+                        │    Human Review     │  ← operator inspects results
+                        └──────────┬──────────┘
+                                   │  "Create Ticket"
+                        ┌──────────▼──────────┐
+                        │    Ticket Agent     │  ← compose & store ticket
+                        └──────────┬──────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │   Stored Ticket     │
+                        └─────────────────────┘
 ```
 
-| Agent | What it does |
-|---|---|
-| **Triage** | Reads the complaint and classifies it (Duplicate Charge, Fraud, Merchant Dispute, etc.), sets priority, and extracts entities like customer ID, merchant name, and amounts. |
-| **Investigation** | Uses tools to pull the customer's profile and recent transactions from the database. Identifies suspicious patterns - duplicate charges seconds apart, overnight fraud bursts, declined cards — and lists concrete evidence. |
-| **Policy** | Searches the bank's internal policy documents to find the governing policy, checks eligibility rules against the evidence, and extracts the SLA, required documents, and resolution steps. |
-| **Similar Cases** | Searches 100 resolved historical cases to find precedents with the same failure pattern. Reports what resolution worked before and recommends a next action. |
-| **Routing** | Determines the owning team (Disputes Ops, Fraud Ops, Card Ops, etc.) using the team playbooks, confirms priority against the playbook's matrix, and sets the escalation path. |
-| **Ticket** | Composes all findings into a structured support ticket and stores it — ready for a human agent to pick up and act on. |
+### Workflow 1 - Resolve Complaint (Read-Only Analysis)
 
-Each agent is defined in [`src/sentinel/agents.ts`](src/sentinel/agents.ts) with focused instructions and only the tools it needs. The pipeline is in [`src/workflows/resolve-complaint.ts`](src/workflows/resolve-complaint.ts).
+Seven agents analyze and route the complaint. No data is written.
+
+#### Stage 1: Classification
+
+| Agent      | What it does                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Triage** | Classifies the complaint (Duplicate Charge, Fraud, Merchant Dispute, etc.), sets priority, and extracts entities — customer ID, merchant, amounts, dates. |
+
+#### Stage 2: Evidence Gathering (conditional)
+
+| Agent                    | What it does                                                                                                                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Investigation**        | Pulls the customer profile and recent transactions from the database. Identifies patterns — duplicate charges seconds apart, overnight fraud bursts, declined cards — and lists concrete evidence. |
+| **Investigation Bypass** | Activates when no customer ID is provided or when the ID is not found in the database. The pipeline continues with complaint-text evidence only.                                                   |
+
+#### Stage 3: Policy & Precedent (parallel)
+
+| Agent             | What it does                                                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Policy**        | Searches internal policy documents to find the governing policy, checks eligibility against evidence, and extracts the SLA, required documents, and resolution steps. |
+| **Similar Cases** | Searches 100 resolved historical cases for precedents with the same failure pattern. Reports what worked before and recommends a next action.                         |
+
+#### Stage 4: Conditional Branch (mutually exclusive)
+
+| Agent                   | Triggers when                           | What it does                                                                                       |
+| ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Escalation Review**   | Policy flags `escalation_required`      | Identifies the required approver, escalation reason and action, and customer impact.               |
+| **Missing Information** | Policy needs more info, customer is missing, or no matching transaction evidence is found | Lists missing documents (dispute form, receipt, etc.) and drafts a polite customer-facing request. |
+| _(Standard — no agent)_ | Neither condition met                   | Pipeline proceeds directly to routing.                                                             |
+
+#### Stage 5: Routing
+
+| Agent       | What it does                                                                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Routing** | Assigns the owning team (Disputes Ops, Fraud Ops, Card Ops, etc.) using team playbooks, confirms priority against the playbook matrix, and sets the escalation path. |
+
+### Workflow 2 — Create Ticket (Controlled Write)
+
+After the operator reviews the analysis and clicks **Create Ticket**:
+
+| Agent      | What it does                                                                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ticket** | Composes all findings — including branch context (escalation details or missing-document list) — into a structured support ticket and stores it in the database. |
+
+The analysis pipeline is in [`src/workflows/resolve-complaint.ts`](src/workflows/resolve-complaint.ts), while the ticket creation pipeline is in [`src/workflows/create-ticket.ts`](src/workflows/create-ticket.ts). Each agent is defined in [`src/sentinel/agents.ts`](src/sentinel/agents.ts) with focused instructions and only the tools it needs.
 
 ---
 
@@ -46,7 +134,8 @@ Sentinel's dynamic business data is stored in a Supabase PostgreSQL database. Th
 - **12 internal policies** covering dispute resolution, fraud handling, chargebacks, EMI, rewards, etc. (local markdown)
 - **5 team playbooks** with priority matrices and escalation rules (local markdown)
 
-Note: This data is synthesised. A further improvement would be the use real API calls for data
+Note: This data is synthesised. A further improvement would be to use real API calls for data.
+
 ---
 
 ## Quick Start
@@ -55,15 +144,18 @@ Note: This data is synthesised. A further improvement would be the use real API 
 
 1. **Configure Environment Variables**:
    Copy `.env.example` to `.env` and fill in your keys:
+
    ```bash
    cp .env.example .env
    ```
+
    Add your keys:
    - `OPENAI_API_KEY`: Your OpenAI API key.
    - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
    - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role API key.
 
 2. **Install & Start**:
+
    ```bash
    # Install dependencies
    npm install
@@ -74,12 +166,15 @@ Note: This data is synthesised. A further improvement would be the use real API 
    ```
 
 Try this in the Assistant:
+
 > Customer reports duplicate Amazon charge. Customer ID: 1234
 
 For development with hot reload:
+
 ```bash
 npm run dev
 ```
+
 ---
 
 ## Project Structure
@@ -87,7 +182,7 @@ npm run dev
 ```
 src/
   sentinel/
-    agents.ts          # Six agent definitions with instructions & tools
+    agents.ts          # Agent definitions with instructions & tools
     schemas.ts         # Valibot schemas for structured agent outputs
     tools.ts           # Database & knowledge tools the agents call
   workflows/
@@ -107,10 +202,10 @@ knowledge/             # Policies, playbooks, historical cases (Markdown + JSON)
 
 ## Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | N.A. | Required. Your OpenAI API key. |
-| `NEXT_PUBLIC_SUPABASE_URL` | N.A. | Required. Your Supabase project URL. |
-| `SUPABASE_SERVICE_ROLE_KEY` | N.A. | Required. Your Supabase service role key (bypasses RLS for backend tools). |
-| `SENTINEL_MODEL` | `openai/gpt-5.5` | Model for all agents. Any [Pi model specifier](https://pi.dev/models) works (e.g. `anthropic/claude-sonnet-4-6`). |
-| `PORT` | `3583` | Server port. |
+| Variable                    | Default          | Description                                                                                                       |
+| --------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`            | —                | Required. Your OpenAI API key.                                                                                    |
+| `NEXT_PUBLIC_SUPABASE_URL`  | —                | Required. Your Supabase project URL.                                                                              |
+| `SUPABASE_SERVICE_ROLE_KEY` | —                | Required. Your Supabase service role key (bypasses RLS for backend tools).                                        |
+| `SENTINEL_MODEL`            | `openai/gpt-5.5` | Model for all agents. Any [Pi model specifier](https://pi.dev/models) works (e.g. `anthropic/claude-sonnet-4-6`). |
+| `PORT`                      | `3583`           | Server port.                                                                                                      |

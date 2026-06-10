@@ -114,32 +114,6 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); }
 .badge.red { background: var(--red-soft); color: var(--red); }
 .badge.grey { background: #eef0f3; color: var(--muted); }
 
-/* workflow timeline */
-.timeline { display: flex; flex-direction: column; gap: 0; }
-.step { display: flex; gap: 12px; align-items: flex-start; padding: 7px 0; }
-.step .dot {
-  width: 22px; height: 22px; border-radius: 50%;
-  border: 2px solid var(--border);
-  background: var(--surface);
-  flex: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: #fff;
-  margin-top: 1px;
-}
-.step.running .dot { border-color: var(--accent); }
-.step.running .dot::after {
-  content: ""; width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid var(--accent); border-top-color: transparent;
-  animation: spin 0.8s linear infinite;
-}
-.step.done .dot { background: var(--green); border-color: var(--green); }
-.step.done .dot::after { content: "✓"; }
-.step.error .dot { background: var(--red); border-color: var(--red); }
-.step.error .dot::after { content: "!"; }
-.step .label { font-weight: 600; font-size: 14px; }
-.step .detail { color: var(--muted); font-size: 13px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .table-container { width: 100%; overflow-x: auto; }
 th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
@@ -188,6 +162,150 @@ ul.evidence li { margin: 3px 0; }
 }
 .tabs button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
+
+/* Flowchart Styles */
+.flowchart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin-top: 10px;
+}
+
+.node-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.split-nodes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  gap: 16px;
+}
+
+.node {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.node-detail {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: center;
+  max-width: 220px;
+  line-height: 1.4;
+}
+
+.node-wrapper.running .node {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+.node-wrapper.running .node::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+  margin-left: 6px;
+}
+
+.node-wrapper.done .node {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
+}
+.node-wrapper.done .node::before {
+  content: "✓ ";
+  font-weight: bold;
+}
+
+.node-wrapper.skipped .node {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #64748b;
+  opacity: 0.7;
+}
+.node-wrapper.skipped .node::before {
+  content: "↷ ";
+  font-weight: bold;
+}
+
+.node-wrapper.error .node {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--red);
+}
+.node-wrapper.error .node::before {
+  content: "! ";
+  font-weight: bold;
+}
+
+.branch-connector {
+  width: 100%;
+  height: 40px;
+  margin: -4px 0;
+}
+.branch-connector svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.straight-connector {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  margin: -4px 0;
+}
+.straight-connector svg {
+  display: block;
+}
+
+.branch-connector path.active,
+.branch-connector line.active,
+.straight-connector line.active {
+  stroke: var(--accent) !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: none !important;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+.branch-connector path.done,
+.branch-connector line.done,
+.straight-connector line.done {
+  stroke: var(--green) !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: none !important;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+.branch-connector path.skipped,
+.branch-connector line.skipped,
+.straight-connector line.skipped {
+  stroke: #cbd5e1 !important;
+  stroke-dasharray: 4 !important;
+}
+
 /* Mobile polish */
 @media (max-width: 500px) {
   nav { padding: 0 14px; gap: 12px; height: 50px; }
@@ -199,3 +317,5 @@ ul.evidence li { margin: 3px 0; }
   textarea { min-height: 72px; }
   button.ghost { font-size: 12px; padding: 5px 10px; }
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
