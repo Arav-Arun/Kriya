@@ -3,9 +3,10 @@
 function renderNav(active) {
   const nav = document.createElement('nav');
   nav.innerHTML = `
-    <div class="brand">Senti<span>nel</span></div>
-    <a href="/" data-page="assistant">Assistant</a>
-    <a href="/tickets" data-page="tickets">Open Tickets</a>
+    <div class="brand">Sentinel</div>
+    <span class="dash-badge">Internal</span>
+    <div class="nav-spacer"></div>
+    <a href="/dashboard" data-page="dashboard">Dashboard</a>
     <a href="/knowledge" data-page="knowledge">Knowledge Base</a>`;
   nav.querySelector(`[data-page="${active}"]`)?.classList.add('active');
   document.body.prepend(nav);

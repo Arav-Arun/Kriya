@@ -1,14 +1,17 @@
 {
   "name": "sentinel",
   "version": "1.0.0",
-  "description": "Multi-agent AI copilot for credit card support operations, built with Flue",
+  "description": "Agentic credit-card resolution platform, built with Flue",
   "scripts": {
     "dev": "flue dev --target node",
     "build": "flue build --target node",
     "typecheck": "tsc --noEmit",
-    "resolve": "flue run resolve-complaint --target node --payload",
+    "test": "node --test tests/*.test.mjs",
+    "chat": "flue run chat-turn --target node --payload",
     "start": "flue build --target node && PORT=3583 node --env-file=.env dist/server.mjs",
-    "serve": "node --env-file=.env dist/server.mjs"
+    "serve": "node --env-file=.env dist/server.mjs",
+    "data:generate": "node scripts/generate-data.mjs",
+    "data:seed": "node --env-file=.env scripts/seed-supabase.mjs"
   },
   "keywords": [],
   "author": "",

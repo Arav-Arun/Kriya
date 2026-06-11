@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="entry-body">
+<main class="entry-container lookup-entry">
+  <header class="entry-header">
+    <div class="brand-lockup">
+      <div class="entry-brand">Sentinel</div>
+    </div>
+    <p class="entry-subtitle">Credit-card operations through chat</p>
+  </header>
+
+  <section class="entry-card card sample-card">
+    <div class="sample-header">
+      <h2>Choose a customer</h2>
+      <p class="panel-copy">Pick one below, or search by email, mobile, ID, name, or card last four.</p>
+    </div>
+    <input type="search" id="customer-search" class="customer-search" placeholder="Search by email, mobile, ID, name, or card last four…" autocomplete="off">
+    <div id="lookup-error" class="error-msg" hidden></div>
+    <div id="sample-results" class="customer-results">
+      <div class="sidebar-loading">Loading...</div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const search = document.getElementById('customer-search');
+  const results = document.getElementById('sample-results');
+  const lookupError = document.getElementById('lookup-error');
+
+  const inr = (n) => '₹' + Number(n ?? 0).toLocaleString('en-IN');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  const maskedPhone = (phone) => {
+    const text = String(phone ?? '');
+    const digits = text.replace(/\D/g, '');
+    return digits.length >= 4 ? `${text.slice(0, 4)}••••${digits.slice(-4)}` : text;
+  };
+
+  function enterChat(customer) {
+    sessionStorage.setItem('customer', JSON.stringify(customer));
+    window.location.assign('/chat');
+  }
+
+  function renderCustomers(customers) {
+    if (!customers.length) {
+      results.innerHTML = '<div class="sidebar-loading">No matching customer.</div>';
+      return;
+    }
+    results.innerHTML = customers.map((c) => `
+      <button class="customer-row" type="button" data-id="${c.id}">
+        <span>
+          <strong>${esc(c.name)}</strong>
+          <small>${esc(c.email || '')}${c.phone ? ` · ${esc(maskedPhone(c.phone))}` : ''}</small>
+        </span>
+        <span class="customer-meta">
+          <b>**** ${esc(c.card_last4)}</b>
+          <small>CIBIL ${esc(c.cibil_score || 'NA')} · ${inr(c.outstanding_total)} due</small>
+        </span>
+      </button>
+    `).join('');
+    results.querySelectorAll('.customer-row').forEach((row) => {
+      row.addEventListener('click', async () => {
+        row.disabled = true;
+        const customer = customers.find((c) => String(c.id) === row.dataset.id);
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id }),
+        });
+        if (res.ok) enterChat(await res.json());
+        else row.disabled = false;
+      });
+    });
+  }
+
+  async function loadDemo() {
+    const res = await fetch('/api/customers/demo');
+    renderCustomers(res.ok ? await res.json() : []);
+  }
+
+  let timer;
+  search.addEventListener('input', () => {
+    lookupError.hidden = true;
+    clearTimeout(timer);
+    const q = search.value.trim();
+    timer = setTimeout(async () => {
+      if (q.length < 2) { loadDemo(); return; }
+      const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+      renderCustomers(res.ok ? await res.json() : []);
+    }, 200);
+  });
+
+  loadDemo();
+})();
+</script>
+</body>
+</html>

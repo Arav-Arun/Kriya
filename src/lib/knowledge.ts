@@ -68,6 +68,7 @@ export const TEAM_BY_CATEGORY: Record<string, string> = {
   'Card Closure': 'Card Operations',
   'International Transactions': 'Card Operations',
   'Merchant Disputes': 'Disputes Operations',
+  'Subscriptions / Autopay': 'Customer Service',
 };
 
 export function getPlaybook(team: string): KnowledgeDoc | undefined {

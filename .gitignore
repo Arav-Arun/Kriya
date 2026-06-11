@@ -26,3 +26,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Uploaded statements and evidence
+data/uploads/

@@ -1,96 +1,64 @@
-// Structured outputs each agent must return (docs/03_AGENT_ARCHITECTURE.md).
-// Flue validates the agent's answer against these before the workflow sees it.
+// Structured outputs for the specialist agents. Flue validates each agent's
+// answer against these before the workflow sees it.
 import * as v from 'valibot';
 
 export const CATEGORIES = [
-  'Duplicate Charge', 'Fraud Transactions', 'Card Declined', 'EMI Conversion',
-  'Rewards', 'Chargeback', 'Lost Card', 'KYC', 'Credit Limit Increase',
-  'Card Closure', 'International Transactions', 'Merchant Disputes',
+  'Late Fee / Penalty', 'Duplicate Charge', 'Fraud Transactions', 'Card Declined',
+  'EMI Conversion', 'Rewards', 'Chargeback', 'Lost Card', 'KYC',
+  'Credit Limit Increase', 'Card Closure', 'International Transactions',
+  'Merchant Disputes', 'Subscriptions / Autopay', 'Card Management',
+  'Account Inquiry', 'General',
 ] as const;
 
-export const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'] as const;
+export const URGENCIES = ['Low', 'Medium', 'High', 'Critical'] as const;
 
 export const TEAMS = [
   'Disputes Operations', 'Fraud Operations', 'Card Operations',
   'Customer Service', 'Risk Operations',
 ] as const;
 
-export const TriageResult = v.object({
+// Triage: decides whether this turn needs the parallel specialist fan-out.
+export const TriageRouting = v.object({
+  route: v.picklist(['direct', 'analysis']),
   category: v.picklist(CATEGORIES),
-  priority: v.picklist(PRIORITIES),
-  customer_id: v.nullable(v.number()),
-  entities: v.array(v.object({ type: v.string(), value: v.string() })),
-  summary: v.string(),
+  urgency: v.picklist(URGENCIES),
+  reasoning: v.string(),
 });
-export type TriageResult = v.InferOutput<typeof TriageResult>;
+export type TriageRouting = v.InferOutput<typeof TriageRouting>;
 
-export const InvestigationResult = v.object({
-  customer_found: v.boolean(),
-  customer_name: v.nullable(v.string()),
-  card_status: v.nullable(v.string()),
-  risk_score: v.nullable(v.number()),
-  matching_transactions: v.array(v.object({
+// Investigation: customer-data forensics.
+export const InvestigationFindings = v.object({
+  findings: v.array(v.string()),
+  relevant_transactions: v.array(v.object({
     id: v.string(),
-    timestamp: v.string(),
     merchant: v.string(),
     amount: v.number(),
-    currency: v.string(),
+    timestamp: v.string(),
     status: v.string(),
   })),
-  evidence: v.array(v.string()),
-  notes: v.string(),
+  payment_behavior: v.string(),
+  flags: v.array(v.string()),
 });
-export type InvestigationResult = v.InferOutput<typeof InvestigationResult>;
+export type InvestigationFindings = v.InferOutput<typeof InvestigationFindings>;
 
-export const PolicyResult = v.object({
+// Policy: governing policy and eligibility.
+export const PolicyFindings = v.object({
   policy_id: v.string(),
   policy_name: v.string(),
   eligibility: v.picklist(['Eligible', 'Not Eligible', 'Needs More Information']),
   sla: v.string(),
-  required_documents: v.array(v.string()),
-  required_actions: v.array(v.string()),
+  key_rules: v.array(v.string()),
   escalation_required: v.boolean(),
-  rationale: v.string(),
 });
-export type PolicyResult = v.InferOutput<typeof PolicyResult>;
+export type PolicyFindings = v.InferOutput<typeof PolicyFindings>;
 
-export const SimilarCasesResult = v.object({
+// Precedent: historical case matching.
+export const PrecedentFindings = v.object({
   cases: v.array(v.object({
     case_id: v.string(),
-    category: v.string(),
     similarity: v.string(),
     resolution: v.string(),
-    resolution_time: v.string(),
   })),
-  common_resolution: v.string(),
-  recommended_next_action: v.string(),
+  recommended_approach: v.string(),
 });
-export type SimilarCasesResult = v.InferOutput<typeof SimilarCasesResult>;
-
-export const RoutingResult = v.object({
-  assigned_team: v.picklist(TEAMS),
-  priority: v.picklist(PRIORITIES),
-  escalation_path: v.string(),
-  rationale: v.string(),
-});
-export type RoutingResult = v.InferOutput<typeof RoutingResult>;
-
-export const EscalationReviewResult = v.object({
-  required_approver: v.string(),
-  reason: v.string(),
-  escalation_action: v.string(),
-  customer_impact: v.string(),
-});
-export type EscalationReviewResult = v.InferOutput<typeof EscalationReviewResult>;
-
-export const MissingInfoResult = v.object({
-  missing_documents: v.array(v.string()),
-  customer_facing_request: v.string(),
-  can_continue: v.boolean(),
-});
-export type MissingInfoResult = v.InferOutput<typeof MissingInfoResult>;
-
-export const TicketResult = v.object({
-  ticket_id: v.string(),
-});
-export type TicketResult = v.InferOutput<typeof TicketResult>;
+export type PrecedentFindings = v.InferOutput<typeof PrecedentFindings>;
