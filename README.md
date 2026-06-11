@@ -164,7 +164,6 @@ knowledge/                        # Source-of-truth policy documents
 
 data/                             # Seed scripts and data
 scripts/                          # Database seeding utilities
-tests/                            # Unit tests (ledger, e-mandates)
 ```
 
 ---
@@ -190,7 +189,6 @@ These are documented limitations for the demo workspace:
 npm install
 npm run data:seed   # Seed database tables in Supabase
 npm start           # Build and serve at http://localhost:3583
-npm test            # Run unit tests
 npm run typecheck   # Run TypeScript checks
 ```
 
