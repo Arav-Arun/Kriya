@@ -39,10 +39,10 @@ function makeAgent(
   }));
 }
 
-export const triageAgent = makeAgent('Sentinel Triage', TRIAGE_PROMPT);
+export const triageAgent = makeAgent('sentinel-triage', TRIAGE_PROMPT);
 
 export const investigationAgent = makeAgent(
-  'Sentinel Investigation',
+  'sentinel-investigation',
   INVESTIGATION_PROMPT,
   [
     // Data-gathering tools ONLY. This agent collects facts — it does not
@@ -55,12 +55,12 @@ export const investigationAgent = makeAgent(
   'medium',
 );
 
-export const policyAgent = makeAgent('Sentinel Policy', POLICY_PROMPT, [searchPolicyTool]);
+export const policyAgent = makeAgent('sentinel-policy', POLICY_PROMPT, [searchPolicyTool]);
 
-export const precedentAgent = makeAgent('Sentinel Precedent', PRECEDENT_PROMPT, [searchSimilarCasesTool]);
+export const precedentAgent = makeAgent('sentinel-precedent', PRECEDENT_PROMPT, [searchSimilarCasesTool]);
 
 export const resolutionAgent = makeAgent(
-  'Sentinel Resolution',
+  'sentinel-resolution',
   RESOLUTION_PROMPT,
   [
     // Read tools for follow-ups that skip the specialist fan-out.
