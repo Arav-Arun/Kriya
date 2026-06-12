@@ -11,7 +11,7 @@ import {
   findCustomersForLookup, listDemoCustomers, getCustomer, getPaymentSummary,
   createConversation, listConversations, getConversation, getMessages, addMessage,
   renameConversation, deleteConversation, addAttachment,
-  listEscalations, listCustomerEscalations, getEscalation, resolveEscalation, listCases, getCase,
+  listEscalations, listCustomerEscalations, getEscalation, resolveEscalation,
   getDisputes, getPortfolioAnalytics, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
   logAction, getCustomerActionsLog,
@@ -19,7 +19,7 @@ import {
 import {
   SUPPORTED_UPLOAD_MIMES, normalizeMimeType, storeUpload, analyzeUpload,
 } from './lib/attachments.ts';
-import { policies, playbooks } from './lib/knowledge.ts';
+
 import type { Customer } from './lib/sentinel-db.ts';
 
 const app = new Hono();
@@ -50,7 +50,7 @@ function serveFile(file: string) {
 app.get('/', (c) => serveFile('start.html') ?? c.notFound());
 app.get('/chat', (c) => serveFile('chat.html') ?? c.notFound());
 app.get('/dashboard', (c) => serveFile('dashboard.html') ?? c.notFound());
-app.get('/knowledge', (c) => serveFile('knowledge.html') ?? c.notFound());
+
 app.get('/assets/:file', (c) => serveFile(c.req.param('file')) ?? c.notFound());
 
 // ── Customers ─────────────────────────────────────────────────────────
@@ -213,6 +213,18 @@ app.get('/api/customer/:id/conversations/:conversationId/messages', async (c) =>
   })));
 });
 
+app.post('/api/customer/:id/conversations/:conversationId/messages', async (c) => {
+  const customerId = Number(c.req.param('id'));
+  const conversationId = Number(c.req.param('conversationId'));
+  if (!(await getConversation(customerId, conversationId))) return c.json({ error: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => null) as { content?: string } | null;
+  if (!body?.content) return c.json({ error: 'Content required' }, 400);
+  
+  const meta = { source: 'operator' };
+  const activeConversationId = await addMessage(customerId, 'assistant', String(body.content), meta, conversationId);
+  return c.json({ success: true, conversation_id: activeConversationId });
+});
+
 // ── Uploads (statements and evidence) ─────────────────────────────────
 app.post('/api/customer/:id/attachments', async (c) => {
   const customerId = Number(c.req.param('id'));
@@ -269,27 +281,7 @@ app.post('/api/escalations/:id/resolve', async (c) => {
   return ok ? c.json({ status: 'resolved' }) : c.json({ error: 'Not found or already resolved' }, 404);
 });
 
-// ── Knowledge ─────────────────────────────────────────────────────────
-app.get('/api/knowledge', async (c) => c.json({
-  policies: policies.map((p) => ({ slug: p.slug, title: p.title })),
-  playbooks: playbooks.map((p) => ({ slug: p.slug, title: p.title })),
-  cases: await listCases(),
-}));
 
-app.get('/api/knowledge/policies/:slug', (c) => {
-  const doc = policies.find((p) => p.slug === c.req.param('slug'));
-  return doc ? c.json(doc) : c.json({ error: 'Not found' }, 404);
-});
-
-app.get('/api/knowledge/playbooks/:slug', (c) => {
-  const doc = playbooks.find((p) => p.slug === c.req.param('slug'));
-  return doc ? c.json(doc) : c.json({ error: 'Not found' }, 404);
-});
-
-app.get('/api/knowledge/cases/:id', async (c) => {
-  const row = await getCase(c.req.param('id'));
-  return row ? c.json(row) : c.json({ error: 'Not found' }, 404);
-});
 
 // ── Flue (workflow dispatch + durable run streams) ────────────────────
 app.route('/', flue());

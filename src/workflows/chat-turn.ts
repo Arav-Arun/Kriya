@@ -12,8 +12,42 @@ import {
 } from '../sentinel/schemas.ts';
 import {
   getCustomer, addMessage, getRecentMessages, getRecentAttachments,
-  getConversation, getActionsSince, createEscalation,
+  getConversation, getActionsSince, createEscalation, getLastAssistantMessage,
 } from '../lib/sentinel-db.ts';
+
+function detectPendingState(reply: string): { waitingForEmiTenure?: boolean; waitingForConfirmation?: boolean } | null {
+  const text = reply.toLowerCase();
+  
+  // Check for EMI tenure request
+  const hasTenure = text.includes('tenure') || 
+                    (text.includes('months') && (text.includes('3') || text.includes('6') || text.includes('9') || text.includes('12')));
+  if (hasTenure) {
+    return { waitingForEmiTenure: true };
+  }
+  
+  // Check for confirmation requests (goodwill waivers, card closures, hotlisting, etc.)
+  // We want to capture prompts/questions asking for confirmation and avoid past-tense completions
+  const isAskingConfirmation = 
+    text.includes('please confirm') ||
+    text.includes('confirm if') ||
+    text.includes('confirm whether') ||
+    text.includes('confirm to') ||
+    text.includes('confirm your') ||
+    text.includes('reply "confirmed"') ||
+    text.includes("reply 'confirmed'") ||
+    text.includes('reply confirmed') ||
+    text.includes('should i') ||
+    text.includes('would you like') ||
+    text.includes('do you want') ||
+    text.includes('go ahead') ||
+    (text.includes('proceed') && !text.includes('proceeded'));
+
+  if (isAskingConfirmation) {
+    return { waitingForConfirmation: true };
+  }
+  
+  return null;
+}
 
 interface Payload {
   customer_id: number;
@@ -62,15 +96,36 @@ export async function run(ctx: FlueContext<Payload>) {
       .join('\n');
     const evidenceBlock = evidence ? `\n\nRecent customer-uploaded statements/evidence:\n${evidence}` : '';
 
-    const triage = await stage('triage', 'Triage', async () => {
-      const harness = await ctx.init(triageAgent, { name: 'triage' });
-      const session = await harness.session();
-      const res = await session.prompt(
-        `Route this customer chat turn.\n\nLatest message:\n${message}\n\nRecent conversation:\n${recent || '(start of conversation)'}${evidenceBlock}`,
-        { result: TriageRouting },
-      );
-      return res.data;
-    });
+    let triage: any;
+    const lastAssistantMsg = activeConversationId ? await getLastAssistantMessage(customerId, activeConversationId) : null;
+    const lastMeta = lastAssistantMsg && lastAssistantMsg.meta
+      ? (typeof lastAssistantMsg.meta === 'string' ? JSON.parse(lastAssistantMsg.meta) : lastAssistantMsg.meta)
+      : null;
+
+    if (lastMeta?.waitingForEmiTenure || lastMeta?.waitingForConfirmation) {
+      triage = {
+        route: 'direct',
+        category: lastMeta.category || 'General',
+        urgency: 'Low',
+        reasoning: 'Skipping triage because the conversation is waiting for EMI tenure or confirmation.',
+      };
+      ctx.log.info('stage', {
+        stage: 'triage',
+        label: 'Triage',
+        status: 'skipped',
+        message: 'Fast path — follow-up response to pending request',
+      });
+    } else {
+      triage = await stage('triage', 'Triage', async () => {
+        const harness = await ctx.init(triageAgent, { name: 'triage' });
+        const session = await harness.session();
+        const res = await session.prompt(
+          `Route this customer chat turn.\n\nLatest message:\n${message}\n\nRecent conversation:\n${recent || '(start of conversation)'}${evidenceBlock}`,
+          { result: TriageRouting },
+        );
+        return res.data;
+      });
+    }
 
     let analysis: {
       investigation: InvestigationFindings;
@@ -141,7 +196,15 @@ export async function run(ctx: FlueContext<Payload>) {
     const rejected = actions.some((a) => String(a.type ?? '').endsWith('_rejected'));
     const status = escalated ? 'escalated' : rejected ? 'action_rejected' : actions.length > 0 ? 'action_taken' : 'response_ready';
 
-    await addMessage(customerId, 'assistant', reply, { actions, category: triage.category, status }, activeConversationId);
+    const pendingState = detectPendingState(reply);
+    const assistantMeta = {
+      actions,
+      category: triage.category,
+      status,
+      ...pendingState,
+    };
+
+    await addMessage(customerId, 'assistant', reply, assistantMeta, activeConversationId);
     ctx.log.info('turn', {
       reply, actions, analyzed: analysis !== null, category: triage.category, status, conversation_id: activeConversationId,
     });
