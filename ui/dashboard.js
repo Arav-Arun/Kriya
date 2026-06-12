@@ -291,10 +291,28 @@
       ${e.resolution_notes ? `<h3>Resolution Notes</h3><p>${esc(e.resolution_notes)}</p>` : ''}
       ${e.status === 'open' ? `
         <div class="resolve-form">
-          <h3>Resolve</h3>
+          <h3>Resolve Ticket</h3>
           <input type="text" id="resolve-by" placeholder="Your name" class="resolve-input">
           <textarea id="resolve-notes" placeholder="Resolution notes..." class="resolve-textarea"></textarea>
           <button class="primary" id="resolve-btn">Mark Resolved</button>
+        </div>
+      ` : ''}
+
+      ${e.customer_id ? `
+        <h3>Customer Conversations</h3>
+        <div class="esc-conv-layout">
+          <div class="esc-conv-list" id="esc-conv-list">
+            <div class="sidebar-loading">Loading conversations...</div>
+          </div>
+          <div class="esc-chat-pane">
+            <div class="esc-messages" id="esc-messages">
+              <div class="empty">Select a conversation to view chat history</div>
+            </div>
+            <div class="esc-input-area" id="esc-input-area" hidden>
+              <textarea id="esc-reply-input" placeholder="Type a manual response to the customer..."></textarea>
+              <button class="primary" id="esc-reply-send">Send Response</button>
+            </div>
+          </div>
         </div>
       ` : ''}
     `;
@@ -314,7 +332,95 @@
       };
     }
 
+    if (e.customer_id) {
+      loadCustomerConversations(e.customer_id);
+    }
+
     detailEl.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function loadCustomerConversations(customerId) {
+    const convListEl = document.getElementById('esc-conv-list');
+    if (!convListEl) return;
+    try {
+      const conversations = await fetch(`/api/customer/${customerId}/conversations`).then((r) => r.json());
+      if (!conversations.length) {
+        convListEl.innerHTML = '<div class="sidebar-loading">No conversations found.</div>';
+        return;
+      }
+
+      convListEl.innerHTML = conversations.map((c, i) => `
+        <div class="esc-conv-item ${i === 0 ? 'active' : ''}" data-conv-id="${c.id}">
+          <strong>${esc(c.title || 'Conversation ' + c.id)}</strong>
+          <small>${new Date(c.updated_at).toLocaleDateString()}</small>
+        </div>
+      `).join('');
+
+      // Setup click handlers
+      const items = convListEl.querySelectorAll('.esc-conv-item');
+      items.forEach((item) => {
+        item.onclick = () => {
+          items.forEach((x) => x.classList.remove('active'));
+          item.classList.add('active');
+          loadChatHistory(customerId, Number(item.dataset.convId));
+        };
+      });
+
+      // Load first conversation by default
+      if (conversations.length > 0) {
+        loadChatHistory(customerId, conversations[0].id);
+      }
+    } catch {
+      convListEl.innerHTML = '<div class="sidebar-loading">Error loading conversations.</div>';
+    }
+  }
+
+  async function loadChatHistory(customerId, convId) {
+    const messagesEl = document.getElementById('esc-messages');
+    const inputAreaEl = document.getElementById('esc-input-area');
+    const sendBtn = document.getElementById('esc-reply-send');
+    const inputEl = document.getElementById('esc-reply-input');
+    if (!messagesEl) return;
+
+    messagesEl.innerHTML = '<div class="sidebar-loading">Loading chat history...</div>';
+    inputAreaEl.hidden = true;
+
+    try {
+      const messages = await fetch(`/api/customer/${customerId}/conversations/${convId}/messages`).then((r) => r.json());
+      messagesEl.innerHTML = messages.length ? messages.map((m) => {
+        const isOperator = m.meta?.source === 'operator';
+        const operatorClass = isOperator ? ' operator' : '';
+        const roleLabel = m.role === 'user' ? 'Customer' : (isOperator ? 'Operator' : 'AI Assistant');
+        return `
+          <div class="esc-msg ${m.role}${operatorClass}">
+            ${esc(m.content).replace(/\n/g, '<br>')}
+            <small>${roleLabel} · ${new Date(m.created_at).toLocaleTimeString()}</small>
+          </div>
+        `;
+      }).join('') : '<div class="empty">No messages in this conversation.</div>';
+
+      inputAreaEl.hidden = false;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      sendBtn.onclick = async () => {
+        const content = inputEl.value.trim();
+        if (!content) return;
+        sendBtn.disabled = true;
+        try {
+          await fetch(`/api/customer/${customerId}/conversations/${convId}/messages`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ content }),
+          });
+          inputEl.value = '';
+          await loadChatHistory(customerId, convId);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      };
+    } catch {
+      messagesEl.innerHTML = '<div class="empty">Error loading messages.</div>';
+    }
   }
 
   loadAnalytics();

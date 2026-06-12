@@ -586,6 +586,19 @@ export async function getRecentMessages(customerId: number, limit = 6, conversat
   return result.reverse();
 }
 
+export async function getLastAssistantMessage(customerId: number, conversationId: number): Promise<any | null> {
+  const { data, error } = await supabase.from('messages')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('conversation_id', conversationId)
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
 // ── Evidence attachments ─────────────────────────────────────────────
 export async function addAttachment(input: {
   customer_id: number;
