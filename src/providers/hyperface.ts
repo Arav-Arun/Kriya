@@ -171,7 +171,7 @@ export const hyperfaceProvider: CardProvider = {
   updateAccountStatus: (accountId, input, o) => call(`/accounts/${accountId}/status`, { method: 'PUT', body: input, idempotencyKey: idem(o) }),
 
   // ── Card Issuing ─────────────────────────────────────────────────────────
-  createCard: (input, o) => call('/cards/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),
+  createCard: (input, o) => call('/cards', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   cardDetails: (cardId) => call(`/cards/${cardId}`, { method: 'GET' }),
 
   // ── Card Management ──────────────────────────────────────────────────────
