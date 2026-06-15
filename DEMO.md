@@ -28,13 +28,13 @@ Use one of these registered numbers to sign in. These represent real customers l
 2. Enter **8398480550** (Jaden) and click **Continue**. Kriya will load Jaden's live profile.
 3. In the chat, type: `"What is my outstanding balance?"` (or tap the suggestion chip).
 4. **Observation**: Sentinel investigations stage runs in the background. Kriya returns Jaden's exact live outstanding balance of **₹1,457.04** and available limit of **₹18,542.96**.
-   > **Boss Framing**: "Every number here is pulled live from the Hyperface system of record. There is zero mock data."
+   > **Key Highlight**: "Every number here is pulled live from the Hyperface system of record. There is zero mock data."
 
 ### 2. Strict-live honesty story
 1. In the chat, type: `"Show my recent transactions"` (or tap the suggestion chip).
 2. **Observation**: Kriya returns:
    > *"I cannot retrieve your transactions from the live system right now because the bank feed has not been enabled yet. I can, however, help with your live balance, limits, and card status."*
-   > **Boss Framing**: "When a bank feed isn't enabled or is down, Sentinel is transparent instead of hallucinating. It strictly tells the truth."
+   > **Key Highlight**: "When a bank feed isn't enabled or is down, Sentinel is transparent instead of hallucinating. It strictly tells the truth."
 
 ### 3. Identity verification & policy gating
 1. In the chat, type: `"I want to increase my credit limit"` (or tap the suggestion chip).
