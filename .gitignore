@@ -36,3 +36,7 @@ scripts/
 
 # Supabase database migrations
 supabase/
+
+# Deployed setup runbooks
+DEPLOY.md
+deploy.md
