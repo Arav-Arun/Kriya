@@ -30,3 +30,6 @@ Thumbs.db
 
 # Uploaded statements and evidence
 data/uploads/
+
+# Local test and utility scripts
+scripts/

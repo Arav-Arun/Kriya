@@ -210,7 +210,7 @@ export async function requestContact(chatId: string): Promise<OutboundDelivery> 
   // so the user can easily type a test/sample number (like a Hyperface UAT directory number).
   const isUat = config.providerMode === 'hyperface_uat';
   const text = isUat
-    ? "Namaste! I'm Kriya, your card assistant. To pull up your card account, please reply with your registered 10-digit mobile number (e.g. 8398480550)."
+    ? "Namaste! I'm Kriya, your card assistant. To pull up your card account, please reply with your registered 10-digit mobile number (e.g. 9876543210)."
     : "Namaste! I'm Kriya, your card assistant. To pull up your account, please share your registered mobile number using the button below.";
   const payload: Record<string, any> = {
     chat_id: chatId,

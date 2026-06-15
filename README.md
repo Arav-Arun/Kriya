@@ -103,33 +103,6 @@ The agent only acts on `eligible: true`; otherwise it explains the reason codes 
 
 ---
 
-## Demo Steps (UAT Test Customers)
-
-To run a demo for fintech leadership:
-
-1. **Login**: Open `http://localhost:3583/` and enter one of the registered test numbers:
-   - **8398480550** (Jaden Peyton): Outstanding balance of ₹1,457.04, available credit of ₹18,542.96.
-   - **8605763345** (Henry Olivia): Outstanding balance of ₹0.
-2. **Live Balance Check**:
-   - Ask: `"What's my outstanding balance?"`
-   - Kriya pulls the real-time balance directly from Hyperface.
-3. **Strict-Live Honesty (Pending Feeds)**:
-   - Ask: `"Show my recent transactions"`
-   - Kriya returns an honest "not available — bank feed not enabled yet" statement, proving we never fabricate data where feeds are pending.
-4. **CIBIL-Gated credit limit policy and verification**:
-   - Ask: `"I want to increase my credit limit"`
-   - Kriya asks for the card's last 4 digits to verify identity. Enter **3350** for Jaden (or **8100** for Henry).
-   - Once verified, Kriya runs the credit limit policy gate check (Vintage, CIBIL >= 730, payment record) to determine eligibility.
-5. **Autopay mandate cancellation**:
-   - Ask: `"Cancel my Netflix subscription mandate"`
-   - Sentinel evaluates eligibility, revokes the autopay mandate in Kriya state, and generates the cancellation receipt.
-6. **Voice Mode**:
-   - Tap the microphone icon and speak: `"What is my credit limit?"`
-   - Kriya transcribes, processes the query, and speaks the live limit back to you.
-
-
----
-
 ## Project Structure
 
 ```
@@ -219,5 +192,5 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://...     # Optional: Flue run-state persistence
-SENTINEL_MODEL=openai/gpt-5.5    # Optional: override the LLM model
+SENTINEL_MODEL=openai/gpt-4o      # Optional: override the LLM model
 ```
