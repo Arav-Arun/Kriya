@@ -6,7 +6,7 @@
 
 ## Description
 
-Governs customer-initiated credit limit increase (CLI) requests and bank-offered pre-approved increases. Per RBI card directions, limit increases require explicit customer consent — no unsolicited limit enhancement may be applied. Decisions are based on repayment history, bureau score, utilization, and income.
+Governs customer-initiated credit limit increase (CLI) requests and bank-offered pre-approved increases. Per RBI card directions, limit increases require explicit customer consent; no unsolicited limit enhancement may be applied. Decisions are based on repayment history, bureau score, utilization, and income.
 
 ## Eligibility Rules
 

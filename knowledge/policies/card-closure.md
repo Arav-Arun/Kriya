@@ -10,10 +10,10 @@ Governs voluntary credit card closure requested by the customer. Per RBI card di
 
 ## Eligibility Rules
 
-1. Total outstanding must be zero — including unbilled transactions and any pending EMI principal. Active EMIs must be foreclosed (foreclosure charges per POL-004 apply) before closure.
+1. Total outstanding must be zero, including unbilled transactions and any pending EMI principal. Active EMIs must be foreclosed (foreclosure charges per POL-004 apply) before closure.
 2. Reward points must be redeemed before closure; customers are given a one-time 30-day redemption window from the closure request date, after which unredeemed points lapse.
 3. A credit balance on the account, if any, is refunded to the customer's registered bank account before closure.
-4. Closure requests are accepted via app, internet banking, email from registered ID, or phone with full verification — a written letter is not mandatory.
+4. Closure requests are accepted via app, internet banking, email from registered ID, or phone with full verification; a written letter is not mandatory.
 5. Annual/renewal fee charged within the last 30 days is reversed pro-rata if the card was unused in the period.
 
 ## Required Documents
@@ -28,7 +28,7 @@ Card Operations
 
 - Closure processing: within 7 working days of request (RBI mandate)
 - Closure confirmation to customer: immediate on completion, via email and SMS
-- Credit bureau update ("closed at customer request"): within 30–45 days
+- Credit bureau update ("closed at customer request"): within 30-45 days
 
 ## Escalation Conditions
 

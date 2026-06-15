@@ -1,7 +1,7 @@
 {
-  "name": "sentinel",
+  "name": "kriya",
   "version": "1.0.0",
-  "description": "Agentic credit-card resolution platform, built with Flue",
+  "description": "Kriya: agentic CardOps platform for Indian credit programs (Nivaran, Kavach, CreditOps, Vaani), built with Flue",
   "scripts": {
     "dev": "flue dev --target node",
     "build": "flue build --target node",

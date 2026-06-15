@@ -6,11 +6,11 @@
 
 ## Description
 
-A duplicate charge occurs when the same card is billed more than once by the same merchant for the same purchase — typically an identical amount within a short window (0–30 minutes). Common causes are merchant POS retries, payment gateway timeouts where the customer re-attempts payment, and double-submission on e-commerce checkout pages. Duplicate charges are distinct from recurring subscription billing and from split shipments billed separately.
+A duplicate charge occurs when the same card is billed more than once by the same merchant for the same purchase; typically an identical amount within a short window (0-30 minutes). Common causes are merchant POS retries, payment gateway timeouts where the customer re-attempts payment, and double-submission on e-commerce checkout pages. Duplicate charges are distinct from recurring subscription billing and from split shipments billed separately.
 
 ## Eligibility Rules
 
-1. Both transactions must be settled (posted), not one settled and one pending authorization. Pending authorizations usually auto-reverse within 5–7 working days.
+1. Both transactions must be settled (posted), not one settled and one pending authorization. Pending authorizations usually auto-reverse within 5-7 working days.
 2. The duplicate must be reported within 60 days of the statement date on which it appears.
 3. Transactions must be at the same merchant with identical or near-identical amounts (tolerance ±₹1 for rounding) within a 24-hour window.
 4. The transaction pattern must not match a recurring subscription (same merchant, same amount, ~30-day interval).

@@ -1,6 +1,6 @@
-# Sentinel
+# Kriya
 
-An agentic, customer-facing operations copilot for an Indian credit card. A cardholder describes a problem in plain language — or uploads a statement or receipt — and Sentinel investigates their account, applies deterministic policy, executes the card operation, and returns an audit-style resolution record. What it cannot safely resolve, it escalates with a clear reference.
+An agentic, customer-facing operations copilot for an Indian credit card. A cardholder describes a problem in plain language (or uploads a statement or receipt) and Sentinel investigates their account, applies deterministic policy, executes the card operation, and returns an audit-style resolution record. What it cannot safely resolve, it escalates with a clear reference.
 
 Built on the [Flue framework](https://flueframework.com). One chat message is one Flue workflow.
 
@@ -29,27 +29,27 @@ customer message  ──▶  TRIAGE  ──▶  route?
 
 ### Agent Architecture
 
-The pipeline enforces a strict **separation of concerns** — each agent has a single, well-defined role:
+The pipeline enforces a strict **separation of concerns**: each agent has a single, well-defined role:
 
 | Agent | Role | Tools | Boundary |
 |-------|------|-------|----------|
 | **Sentinel Triage** | Classifies the customer's message, picks route (`direct` vs `analysis`), sets urgency | None (pure classification) | Never answers the customer |
-| **Sentinel Investigation** | Gathers raw account facts: profile, transactions, fees, EMIs, disputes, mandates | Read-only data tools | **Never makes eligibility decisions** — that's Resolution's job |
+| **Sentinel Investigation** | Gathers raw account facts: profile, transactions, fees, EMIs, disputes, mandates | Read-only data tools | **Never makes eligibility decisions**; that's Resolution's job |
 | **Sentinel Policy** | Looks up the governing policy document, SLA, and eligibility rules | `search_policy` only | Reports rules; does not compute verdicts |
 | **Sentinel Precedent** | Finds how similar historical cases were resolved | `search_similar_cases` only | Cites only real case IDs from the database |
 | **Sentinel Resolution** | Holds the persistent customer session. **Sole authority** to run deterministic policy gates and execute card operations | All policy checks + all action tools | Owns decision-making and action execution |
 
 **Why Investigation doesn't have policy gate tools:** Policy gate checks require the action context that only the Resolution agent holds. If Investigation computed eligibility, the Resolution agent would inherit stale verdicts from a different execution context. By keeping Investigation as pure forensics and giving Resolution exclusive policy-gate authority, we ensure every decision is computed fresh against live data at the moment of action.
 
-The three review agents run in `Promise.all`, so a complex case completes in one round of work rather than three. The chat UI shows each operation as a named row with live status — not a generic "thinking…" animation, but the actual pipeline executing.
+The three review agents run in `Promise.all`, so a complex case completes in one round of work rather than three. The chat UI shows each operation as a named row with live status, not a generic "thinking…" animation, but the actual pipeline executing.
 
 ## Operational truth lives in the database
 
-Every figure the customer sees is read from the database — nothing is mocked in the front end. Business data (customers, transactions, payments, fees, statements, disputes, e-mandates, conversations, and the `actions_log` audit trail) lives in **Supabase Postgres**, accessed through `src/lib/sentinel-db.ts`. Flue's own run state persists to Postgres when `DATABASE_URL` is set, and falls back to local SQLite for development.
+Every figure the customer sees is read from the database; nothing is mocked in the front end. Business data (customers, transactions, payments, fees, statements, disputes, e-mandates, conversations, and the `actions_log` audit trail) lives in **Supabase Postgres**, accessed through `src/database/queries.ts`. Flue's own run state persists to Postgres when `DATABASE_URL` is set, and falls back to local SQLite for development.
 
 ## Policy is deterministic, not vibes
 
-Core eligibility decisions are never left to the model's prose. Before any sensitive action, the Resolution agent must call a deterministic check in `src/sentinel/policy.ts` that computes the verdict from account data and returns a structured result:
+Core eligibility decisions are never left to the model's prose. Before any sensitive action, the Resolution agent must call a deterministic check in `src/services/policy-gates.ts` that computes the verdict from account data and returns a structured result:
 
 ```typescript
 { eligible, reason_codes, facts_checked, missing_evidence, required_next_step, policy_reference }
@@ -66,21 +66,21 @@ Core eligibility decisions are never left to the model's prose. Before any sensi
 | **E-mandate cancellation** | Mandate must exist and be active (RBI opt-out right), 24h pre-debit notice applies |
 | **Fraud liability timing** | RBI zero-liability ≤3 working days, capped ≤7 days, card must be blocked immediately, FIR required above ₹1,00,000, repeat fraud in 6 months triggers risk re-rating |
 
-The agent only acts on `eligible: true`; otherwise it explains the reason codes or collects the missing evidence. The ledger maths (`src/lib/ledger.ts`) and the e-mandate model (`src/lib/emandates.ts`) are pure and unit-tested.
+The agent only acts on `eligible: true`; otherwise it explains the reason codes or collects the missing evidence. The e-mandate model (`src/services/emandates.ts`) is pure and deterministic; agents explain mandate terms but never invent them.
 
 ## Automated vs. escalated
 
 - **Automated** when policy, account data, and authority allow it: waive a fee, refund a confirmed duplicate, block/unblock a card, set card controls, cancel an e-mandate, convert to EMI, redeem points, raise a dispute, increase a limit when eligible.
 - **Confirm first** for irreversible actions: card closure, permanent hotlisting.
-- **Escalated** when the AI genuinely cannot finish — fraud investigations, chargebacks, KYC. The card is blocked first if fraud is suspected, an escalation is created with the investigation already attached, and the customer is given a reference (e.g. `ESC-1002`) and a status.
+- **Escalated** when the AI genuinely cannot finish: fraud investigations, chargebacks, KYC. The card is blocked first if fraud is suspected, an escalation is created with the investigation already attached, and the customer is given a reference (e.g. `ESC-1002`) and a status.
 
 ## Indian credit-card rules modelled
 
-- **RBI e-mandate framework (2026)** — recurring autopays are real mandates: AFA at setup, a 24-hour pre-debit notification, customer opt-out/cancel at any time, **no customer fee** for e-mandate usage, and AFA-free recurring limits of **₹15,000** generally / **₹1,00,000** for insurance, mutual funds, and credit-card-bill mandates. Cancellation issues a receipt and stops future debits without refunding past charges.
-- **RBI dispute lifecycle** — under_review → provisional_credit (within 7 working days) → won/lost (30–45 days).
-- **RBI limited-liability (fraud) timing** — zero liability when reported within 3 working days, capped liability (₹10,000 or transaction value) at 4–7 days, per-policy beyond that. FIR mandatory for disputes above ₹1,00,000.
+- **RBI e-mandate framework (2026)**: recurring autopays are real mandates: AFA at setup, a 24-hour pre-debit notification, customer opt-out/cancel at any time, **no customer fee** for e-mandate usage, and AFA-free recurring limits of **₹15,000** generally / **₹1,00,000** for insurance, mutual funds, and credit-card-bill mandates. Cancellation issues a receipt and stops future debits without refunding past charges.
+- **RBI dispute lifecycle**: under_review → provisional_credit (within 7 working days) → won/lost (30-45 days).
+- **RBI limited-liability (fraud) timing**: zero liability when reported within 3 working days, capped liability (₹10,000 or transaction value) at 4-7 days, per-policy beyond that. FIR mandatory for disputes above ₹1,00,000.
 - **18% GST** on all card fees; **forex markup** at 3.5%; **fuel surcharge waiver**.
-- **CIBIL bands** — Excellent 750+, Good 700–749, Fair 650–699, Needs attention < 650. CIBIL is enforced in policy gates (730 for limit increase, 650 for EMI conversion and fee waivers).
+- **CIBIL bands**: Excellent 750+, Good 700-749, Fair 650-699, Needs attention < 650. CIBIL is enforced in policy gates (730 for limit increase, 650 for EMI conversion and fee waivers).
 - **UPI-on-RuPay**, MCC codes, and 12-digit RRNs on transactions.
 
 ---
@@ -132,38 +132,53 @@ To run a demo for fintech leadership:
 
 ```
 src/
-├── app.ts                        # Hono HTTP routes (API + pages)
-├── db.ts                         # Flue persistence configuration
-├── lib/
-│   ├── sentinel-db.ts            # All Supabase data access (customers, txns, fees, disputes, escalations, actions_log)
-│   ├── knowledge.ts              # Policy & playbook document loading + semantic search
-│   ├── ledger.ts                 # Pure ledger math (fees, GST, interest, forex markup)
-│   ├── emandates.ts              # E-mandate model (RBI framework helpers, cancellation receipts)
-│   └── attachments.ts            # Upload storage, MIME handling, Vision/LLM analysis
-├── sentinel/
-│   ├── agents.ts                 # Agent definitions (5 agents, each with scoped tools)
-│   ├── prompts.ts                # System prompts enforcing separation of concerns
-│   ├── schemas.ts                # Valibot schemas for structured agent outputs
-│   ├── tools.ts                  # 25+ tool definitions (read-only + action tools)
-│   └── policy.ts                 # Deterministic policy gates (6 checks, CIBIL-enforced)
+├── app.ts                        # Hono HTTP routes (API, pages, Telegram channels, webhooks)
+├── db.ts                         # Flue run-state persistence (Postgres, SQLite fallback)
+├── agents/                       # Specialized Flue agents (triage, investigation, policy, resolution)
+│   ├── triage.ts
+│   ├── investigation.ts
+│   ├── policy.ts
+│   └── resolution.ts
+├── config/
+│   └── env.ts                    # Environment config loader & schema validation
+├── database/
+│   ├── client.ts                 # Supabase client initialization
+│   └── queries.ts                # Supabase database queries (profile, transactions, disputes, logs, etc.)
+├── providers/
+│   ├── hyperface.ts              # Hyperface API provider integration
+│   ├── hyperface-webhooks.ts     # Hyperface webhook utility functions
+│   └── types.ts                  # Normalized data models and API types
+├── services/
+│   ├── attachments.ts            # Vision analysis, evidence uploads and storage
+│   ├── emandates.ts              # RBI e-mandate receipts and helper utilities
+│   ├── knowledge.ts              # Policy document search engine
+│   ├── policy-gates.ts           # Deterministic policy validation gates (late-fee, CIBIL, EMI, etc.)
+│   ├── prompts.ts                # LLM agent instructions/system prompts
+│   ├── provider-tools.ts         # Live card tools & fallback helpers
+│   ├── schemas.ts                # Valibot schemas for structured agent responses
+│   ├── storage.ts                # Supabase storage configuration
+│   ├── tools.ts                  # Kriya agent action and read tools
+│   ├── verify.ts                 # Customer identification & verification gates (OTP, possession)
+│   └── voice.ts                  # Sarvam audio voice processing (STT / TTS)
 └── workflows/
-    └── chat-turn.ts              # Flue workflow: Triage → Parallel fan-out → Resolution
+    └── chat-turn.ts              # Durable Flue workflow orchestrating agents
 
-ui/                               # Static front-end (vanilla HTML/CSS/JS)
-├── chat.html                     # Main app shell
-├── chat.js                       # UI logic (tab rendering, chat, real-time pipeline stages)
-├── app.css                       # Design system
-├── start.html                    # Login / customer selection
-├── dashboard.html                # Operations dashboard
-└── knowledge.html                # Policy knowledge base viewer
+ui/                               # Static frontend portal files
+├── kriya-logo.png                # Corporate Branding Logo
+├── start.html                    # Unified portal gateway & customer login selection
+├── portal/
+│   ├── chat.html                 # Sleek, responsive web chat screen
+│   └── chat.js                   # Web socket & agent communication frontend logic
+└── shared/
+    ├── app.css                   # Global styles & layout definition
+    ├── kriya.css                 # Main theme styling (Midnight layout, cyan and amber glows)
+    ├── start.css                 # Login page aesthetic styling
+    └── utils.js                  # Formatting and currency utilities
 
 knowledge/                        # Source-of-truth policy documents
-├── policies/                     # 10 policy docs (POL-001 through POL-011)
-├── playbooks/                    # Resolution playbooks
-└── cases/                        # Historical case records for precedent matching
+└── policies/                     # 12 policy docs, searched live by the policy agent
 
-data/                             # Seed scripts and data
-scripts/                          # Database seeding utilities
+data/                             # Runtime data (uploads, local Flue SQLite)
 ```
 
 ---
@@ -187,7 +202,6 @@ These are documented limitations for the demo workspace:
 
 ```bash
 npm install
-npm run data:seed   # Seed database tables in Supabase
 npm start           # Build and serve at http://localhost:3583
 npm run typecheck   # Run TypeScript checks
 ```
@@ -197,8 +211,8 @@ npm run typecheck   # Run TypeScript checks
 Copy `.env.example` to `.env` and fill in:
 
 ```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=eyJ...
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
 OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://...     # Optional: Flue run-state persistence
 SENTINEL_MODEL=openai/gpt-5.5    # Optional: override the LLM model

@@ -1,0 +1,165 @@
+/* Self-contained layout on the kriya.css token system. */
+.wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+/* Bottom breathing room: the page has no footer, so the last block (.hermes)
+   would otherwise sit flush against the viewport edge. Padding (not margin)
+   so it can't collapse through the section/main wrappers. */
+main.wrap { padding-bottom: 64px; }
+h1, h2, h3 { font-optical-sizing: auto; }
+
+.nav {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; padding: 0 26px;
+  background: rgba(250, 246, 239, 0.66);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.brand:hover { text-decoration: none; color: var(--ink); }
+.brand svg { display: block; }
+.brand-logo { display: block; border-radius: 8px; object-fit: contain; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 11px 19px; border-radius: 11px; font: 500 14.5px var(--sans);
+  background: var(--ink); color: #fff; border: 1px solid var(--ink);
+  cursor: pointer; transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line-2); }
+
+.hero { text-align: center; padding: 92px 0 30px; }
+.hero h1 {
+  font-family: var(--serif); font-weight: 400;
+  font-size: clamp(40px, 6.2vw, 62px); line-height: 1.0;
+  letter-spacing: -0.028em; margin: 0 0 24px; text-wrap: balance;
+}
+.hero p {
+  color: var(--ink-2); font-size: 18px; line-height: 1.55;
+  max-width: 50ch; margin: 0 auto 32px; text-wrap: pretty;
+}
+.hero .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+@media (max-width: 640px) { .hero { padding-top: 52px; } }
+
+.sec-head { margin: 76px 0 26px; text-align: center; }
+.sec-head h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(27px, 4vw, 34px); letter-spacing: -0.02em; margin: 0 0 10px; }
+.sec-head p { color: var(--ink-2); font-size: 16px; line-height: 1.55; max-width: 62ch; margin: 0 auto; text-wrap: pretty; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  display: flex; flex-direction: column;
+  background: rgba(255, 253, 249, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow);
+  border-radius: 20px; padding: 24px 24px 22px;
+}
+/* The grid stretches all cards to equal height; this pins each card's CTA to
+   the bottom so the three buttons land on one horizontal line regardless of
+   how the lede/steps text wraps. */
+.card .card-cta { margin-top: auto; padding-top: 18px; }
+.card .card-cta .btn { width: 100%; justify-content: center; box-sizing: border-box; }
+.card-top { display: flex; align-items: center; gap: 13px; margin-bottom: 14px; }
+.glyph {
+  width: 44px; height: 44px; border-radius: 12px; flex: none; overflow: hidden;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.glyph svg { display: block; }
+.card h3 { font-family: var(--serif); font-size: 21px; font-weight: 500; letter-spacing: -0.01em; margin: 0; flex: 1; }
+.card .lede { color: var(--ink-2); font-size: 14.5px; line-height: 1.5; margin: 0 0 16px; }
+
+ol.steps { margin: 12px 0 0; padding: 0; list-style: none; counter-reset: s; }
+ol.steps li {
+  position: relative; padding: 9px 0 9px 30px; color: var(--ink-2); font-size: 14px; line-height: 1.45;
+  border-top: 1px solid var(--line);
+}
+ol.steps li:first-child { border-top: 0; }
+ol.steps li::before {
+  counter-increment: s; content: counter(s);
+  position: absolute; left: 0; top: 9px;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 600 11px var(--sans); color: var(--indigo);
+  background: var(--indigo-bg);
+}
+ol.steps b { color: var(--ink); font-weight: 600; }
+
+.hermes {
+  margin-top: 26px; border-radius: 22px; padding: 34px 32px;
+  background: var(--spectrum-soft);
+  border: 1px solid rgba(255,255,255,.6);
+}
+.hermes h2 { font-family: var(--serif); font-weight: 400; font-size: 28px; letter-spacing: -0.02em; margin: 0 0 12px; }
+.hermes p { color: var(--ink-2); font-size: 16px; line-height: 1.6; max-width: 76ch; margin: 0 0 22px; }
+.flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.flow .step { background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 14px; font: 500 13.5px var(--sans); }
+.flow .arr { color: var(--ink-3); font-size: 15px; }
+
+footer.foot {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  margin: 76px 0 40px; padding-top: 24px; border-top: 1px solid var(--line);
+  color: var(--ink-3); font-size: 13px;
+}
+footer.foot .serif { font-family: var(--serif); }
+
+/* ── API capabilities index ─────────────────────────────────────── */
+.api-index {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  margin-top: 8px;
+}
+@media (max-width: 760px) { .api-index { grid-template-columns: 1fr; } }
+
+.api-group {
+  background: rgba(255, 253, 249, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow);
+  border-radius: 18px;
+  padding: 22px 24px 18px;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.api-group:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(30,32,51,.05), 0 12px 36px -10px rgba(30,32,51,.18);
+}
+
+.api-group-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.api-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
+}
+.api-group-head h3 {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+  flex: 1;
+}
+.api-list {
+  margin: 0; padding: 0; list-style: none;
+}
+.api-list li {
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.api-list li:first-child { border-top: 0; }
+.api-list li strong {
+  color: var(--ink);
+  font-weight: 600;
+}

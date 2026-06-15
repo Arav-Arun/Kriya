@@ -1,58 +1,29 @@
 // One customer chat turn, as a Flue workflow:
-//   Triage → (Account Evidence ∥ Policy Check ∥ Precedent Review) → Action Execution.
-// The three review operations run in parallel for complex issues and are skipped for
+//   Triage → (Account Evidence ∥ Policy Check) → Action Execution.
+// The two review operations run in parallel for complex issues and are skipped for
 // simple turns. The Action Execution agent holds the persistent per-customer session
 // (chat-{customerId}), so conversation memory survives reloads and restarts.
 import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import triageAgent from '../agents/triage.ts';
+import investigationAgent from '../agents/investigation.ts';
+import policyAgent from '../agents/policy.ts';
+import resolutionAgent from '../agents/resolution.ts';
 import {
-  triageAgent, investigationAgent, policyAgent, precedentAgent, resolutionAgent,
-} from '../sentinel/agents.ts';
-import {
-  TriageRouting, InvestigationFindings, PolicyFindings, PrecedentFindings,
-} from '../sentinel/schemas.ts';
+  TriageRouting, InvestigationFindings, PolicyFindings,
+} from '../services/schemas.ts';
 import {
   getCustomer, addMessage, getRecentMessages, getRecentAttachments,
   getConversation, getActionsSince, createEscalation, getLastAssistantMessage,
-} from '../lib/sentinel-db.ts';
-
-function detectPendingState(reply: string): { waitingForEmiTenure?: boolean; waitingForConfirmation?: boolean } | null {
-  const text = reply.toLowerCase();
-  
-  // Check for EMI tenure request
-  const hasTenure = text.includes('tenure') || 
-                    (text.includes('months') && (text.includes('3') || text.includes('6') || text.includes('9') || text.includes('12')));
-  if (hasTenure) {
-    return { waitingForEmiTenure: true };
-  }
-  
-  // Check for confirmation requests (goodwill waivers, card closures, hotlisting, etc.)
-  // We want to capture prompts/questions asking for confirmation and avoid past-tense completions
-  const isAskingConfirmation = 
-    text.includes('please confirm') ||
-    text.includes('confirm if') ||
-    text.includes('confirm whether') ||
-    text.includes('confirm to') ||
-    text.includes('confirm your') ||
-    text.includes('reply "confirmed"') ||
-    text.includes("reply 'confirmed'") ||
-    text.includes('reply confirmed') ||
-    text.includes('should i') ||
-    text.includes('would you like') ||
-    text.includes('do you want') ||
-    text.includes('go ahead') ||
-    (text.includes('proceed') && !text.includes('proceeded'));
-
-  if (isAskingConfirmation) {
-    return { waitingForConfirmation: true };
-  }
-  
-  return null;
-}
+} from '../database/queries.ts';
+import { noteChannelBinding, handleVerificationReply } from '../services/verify.ts';
 
 interface Payload {
   customer_id: number;
   conversation_id?: number;
   message: string;
+  /** Where this turn came from. Trusted channels (signature/token-verified
+   *  webhooks bound to the registered number) grant the possession factor. */
+  channel?: { kind: string; peer?: string; trusted?: boolean };
 }
 
 export async function run(ctx: FlueContext<Payload>) {
@@ -63,6 +34,26 @@ export async function run(ctx: FlueContext<Payload>) {
 
   const customer = await getCustomer(customerId);
   if (!customer) throw new Error(`Unknown customer ${customerId}`);
+
+  // Register this turn's identity context for the verification gates.
+  const channel = ctx.payload?.channel;
+  noteChannelBinding(customerId, {
+    kind: channel?.kind ?? 'web',
+    peer: channel?.peer,
+    trusted: Boolean(channel?.trusted),
+  });
+  const channelNote = channel?.trusted
+    ? `Channel: ${channel.kind} (trusted — message from the registered mobile number; possession factor satisfied)`
+    : `Channel: ${channel?.kind ?? 'web'} (untrusted session — no possession factor; sensitive actions need the card last-4, and channel-gated ones must be done from the registered WhatsApp/Telegram)`;
+
+  // Deterministic identity-factor handling, BEFORE the agent runs. If the
+  // customer replied with a code, the workflow verifies it itself — security
+  // factor routing must not hinge on a small model picking the right tool.
+  const verification = await handleVerificationReply(customerId, message);
+  const verificationNote = verification.handled
+    ? `\nIdentity update (handled deterministically just now): ${verification.note} Do NOT re-ask for this factor — call get_verification_status and continue the customer's pending request.`
+    : '';
+
   const conversationId = requestedConversationId && await getConversation(customerId, requestedConversationId)
     ? requestedConversationId
     : undefined;
@@ -102,18 +93,22 @@ export async function run(ctx: FlueContext<Payload>) {
       ? (typeof lastAssistantMsg.meta === 'string' ? JSON.parse(lastAssistantMsg.meta) : lastAssistantMsg.meta)
       : null;
 
-    if (lastMeta?.waitingForEmiTenure || lastMeta?.waitingForConfirmation) {
+    const isWaiting = lastMeta?.waitingForEmiTenure || lastMeta?.waitingForConfirmation;
+
+    if (verification.handled || isWaiting) {
       triage = {
         route: 'direct',
-        category: lastMeta.category || 'General',
+        category: lastMeta?.category || 'General',
         urgency: 'Low',
-        reasoning: 'Skipping triage because the conversation is waiting for EMI tenure or confirmation.',
+        reasoning: verification.handled
+          ? 'Skipping triage: the customer supplied an identity factor, handled deterministically.'
+          : 'Skipping triage because the conversation is waiting for EMI tenure or confirmation.',
       };
       ctx.log.info('stage', {
         stage: 'triage',
         label: 'Triage',
         status: 'skipped',
-        message: 'Fast path — follow-up response to pending request',
+        message: verification.handled ? 'Fast path: identity-factor reply' : 'Fast path: follow-up response to pending request',
       });
     } else {
       triage = await stage('triage', 'Triage', async () => {
@@ -130,13 +125,12 @@ export async function run(ctx: FlueContext<Payload>) {
     let analysis: {
       investigation: InvestigationFindings;
       policy: PolicyFindings;
-      precedents: PrecedentFindings;
     } | null = null;
 
     if (triage.route === 'analysis') {
       const issue = `Customer ID: ${customerId} (${customer.name})\nIssue category: ${triage.category}\nCustomer message:\n${message}${evidenceBlock}`;
 
-      const [investigation, policy, precedents] = await Promise.all([
+      const [investigation, policy] = await Promise.all([
         stage('investigation', 'Investigation', async () => {
           const harness = await ctx.init(investigationAgent, { name: 'investigation' });
           const session = await harness.session();
@@ -155,22 +149,13 @@ export async function run(ctx: FlueContext<Payload>) {
           );
           return res.data;
         }),
-        stage('precedent', 'Precedents', async () => {
-          const harness = await ctx.init(precedentAgent, { name: 'precedent' });
-          const session = await harness.session();
-          const res = await session.prompt(
-            `Find historical precedents for this issue.\n\n${issue}`,
-            { result: PrecedentFindings },
-          );
-          return res.data;
-        }),
       ]);
-      analysis = { investigation, policy, precedents };
+      analysis = { investigation, policy };
     } else {
       for (const [s, l] of [
-        ['investigation', 'Investigation'], ['policy', 'Policy Check'], ['precedent', 'Precedents'],
+        ['investigation', 'Investigation'], ['policy', 'Policy Check'],
       ]) {
-        ctx.log.info('stage', { stage: s, label: l, status: 'skipped', message: 'Fast path — no analysis needed' });
+        ctx.log.info('stage', { stage: s, label: l, status: 'skipped', message: 'Fast path: no analysis needed' });
       }
     }
 
@@ -178,30 +163,45 @@ export async function run(ctx: FlueContext<Payload>) {
       const harness = await ctx.init(resolutionAgent, { name: `chat-${customerId}` });
       const session = await harness.session();
       const prompt = analysis
-        ? `Customer message:\n${message}${evidenceBlock}\n\nSpecialist analysis (from real account data — trust it):\n${JSON.stringify(analysis, null, 2)}\n\nCustomer ID for tool calls: ${customerId}`
-        : `Customer message:\n${message}${evidenceBlock}\n\nCustomer ID for tool calls: ${customerId}`;
+        ? `Customer message:\n${message}${evidenceBlock}\n\nSpecialist analysis (from real account data; trust it):\n${JSON.stringify(analysis, null, 2)}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`
+        : `Customer message:\n${message}${evidenceBlock}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`;
       const res = await session.prompt(prompt);
       return res.text;
     });
 
-    // Authoritative record of what the Resolution agent actually did this turn
-    // (every action tool writes to actions_log).
-    const actions = (await getActionsSince(customerId, turnStartedAt)).map((a: any) => ({
-      type: a.action_type,
-      detail: a.action_detail ? JSON.parse(a.action_detail) : null,
-      at: a.performed_at,
-    }));
+    // Retrieve all actions logged during this turn.
+    const rawActions = await getActionsSince(customerId, turnStartedAt);
+
+    // Read the deterministic state set by the set_conversation_state tool call, if any.
+    const stateAction = rawActions.find((a: any) => a.action_type === 'conversation_state_updated');
+    const stateValue = stateAction && stateAction.action_detail
+      ? (typeof stateAction.action_detail === 'string' ? JSON.parse(stateAction.action_detail).state : (stateAction.action_detail as any).state)
+      : null;
+
+    // Filter out internal system logs (like verification logs or state updates) from the UI-facing actions list.
+    const actions = rawActions
+      .filter((a: any) => ![
+        'conversation_state_updated',
+        'verification_required',
+        'verification_knowledge_verified',
+        'verification_knowledge_failed'
+      ].includes(a.action_type))
+      .map((a: any) => ({
+        type: a.action_type,
+        detail: a.action_detail ? (typeof a.action_detail === 'string' ? JSON.parse(a.action_detail) : a.action_detail) : null,
+        at: a.performed_at,
+      }));
 
     const escalated = actions.some((a) => a.type === 'escalation_created');
     const rejected = actions.some((a) => String(a.type ?? '').endsWith('_rejected'));
     const status = escalated ? 'escalated' : rejected ? 'action_rejected' : actions.length > 0 ? 'action_taken' : 'response_ready';
 
-    const pendingState = detectPendingState(reply);
     const assistantMeta = {
       actions,
       category: triage.category,
       status,
-      ...pendingState,
+      waitingForEmiTenure: stateValue === 'waiting_for_emi_tenure' ? true : undefined,
+      waitingForConfirmation: stateValue === 'waiting_for_confirmation' ? true : undefined,
     };
 
     await addMessage(customerId, 'assistant', reply, assistantMeta, activeConversationId);
@@ -221,7 +221,7 @@ export async function run(ctx: FlueContext<Payload>) {
       investigation: `Error: ${String(err).slice(0, 500)}`,
       recommended_action: 'Review the conversation and contact the customer directly.',
     });
-    const reply = `I'm sorry, ${customer.name.split(' ')[0]} — I ran into a technical problem while working on this. I've escalated it to our support team (reference ${escalationId}) and someone will reach out shortly.`;
+    const reply = `I'm sorry, ${customer.name.split(' ')[0]}, I ran into a technical problem while working on this. I've escalated it to our support team (reference ${escalationId}) and someone will reach out shortly.`;
     const actions = [{ type: 'escalation_created', detail: { escalation_id: escalationId }, at: new Date().toISOString() }];
     await addMessage(customerId, 'assistant', reply, { actions }, activeConversationId);
     ctx.log.info('turn', { reply, actions, analyzed: false, conversation_id: activeConversationId });

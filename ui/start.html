@@ -3,105 +3,269 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sentinel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css">
+<title>Kriya · Credit-card copilot on every channel</title>
+<meta name="description" content="Kriya answers card and bill questions, checks the live account, and only takes the actions you allow. It works on Telegram, the web and voice, and every action is logged.">
+<link rel="stylesheet" href="/assets/shared/kriya.css">
+<link rel="stylesheet" href="/assets/shared/start.css">
 </head>
-<body class="entry-body">
-<main class="entry-container lookup-entry">
-  <header class="entry-header">
-    <div class="brand-lockup">
-      <div class="entry-brand">Sentinel</div>
-    </div>
-    <p class="entry-subtitle">Credit-card operations through chat</p>
-  </header>
+<body class="k-body">
 
-  <section class="entry-card card sample-card">
-    <div class="sample-header">
-      <h2>Choose a customer</h2>
-      <p class="panel-copy">Pick one below, or search by email, mobile, ID, name, or card last four.</p>
+<nav class="nav">
+  <a href="/" class="brand">
+    <img src="/assets/kriya-logo.png" width="32" height="32" alt="Kriya" class="brand-logo">
+    Kriya
+  </a>
+</nav>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Card help, wherever your<br>customers already are.</h1>
+    <p>Kriya answers card and bill questions, checks the live account, and only takes the
+       actions you allow. It meets your customers on Telegram, the web and voice,
+       and everything it does is logged.</p>
+    <div class="cta">
+      <a class="btn" href="/chat">Chat on the web
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a class="btn ghost" href="#channels">Add a channel</a>
     </div>
-    <input type="search" id="customer-search" class="customer-search" placeholder="Search by email, mobile, ID, name, or card last four…" autocomplete="off">
-    <div id="lookup-error" class="error-msg" hidden></div>
-    <div id="sample-results" class="customer-results">
-      <div class="sidebar-loading">Loading...</div>
+  </section>
+  <section id="capabilities" class="caps">
+    <div class="sec-head">
+      <h2>Everything Kriya can handle</h2>
+      <p>Kriya turns the full Hyperface Credit Stack into plain-language actions. Ask in your own
+         words on any channel. Kriya checks the live account, verifies it's really you before
+         anything risky, and gets it done.</p>
+    </div>
+
+    <div class="api-index">
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: var(--green)"></span>
+          <h3>Accounts & Balances</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Account Summary</strong>: current balance, credit/cash limits, currency, card snapshot</li>
+          <li><strong>Account Details</strong>: full record: product, billing cycle, status, dates</li>
+          <li><strong>Update Credit Limit</strong>: increase or decrease the approved credit limit</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: #c43d2b"></span>
+          <h3>Card Management</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Lock Card</strong>: temporarily freeze the card (reversible)</li>
+          <li><strong>Unlock Card</strong>: remove the temporary lock</li>
+          <li><strong>Hotlist Card</strong>: permanently disable a lost or stolen card (irreversible)</li>
+          <li><strong>Replace Card</strong>: order a replacement card (damaged/lost)</li>
+          <li><strong>View Card Controls</strong>: see which channels (online, POS, contactless, ATM, international) are enabled</li>
+          <li><strong>Set Card Controls</strong>: toggle channels and adjust per-channel limits</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: #8a5cc0"></span>
+          <h3>Transactions & Statements</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Fetch Transactions</strong>: list recent transactions with merchant, amount, status</li>
+          <li><strong>Billed Transactions</strong>: charges that appear on the last statement</li>
+          <li><strong>Unbilled Transactions</strong>: charges in the current cycle not yet billed</li>
+          <li><strong>Transaction Inquiry</strong>: look up a single transaction by id or reference</li>
+          <li><strong>Fetch Statements</strong>: statement history with totals, dues, and dates</li>
+          <li><strong>Download Statement</strong>: get the statement document (PDF)</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: var(--amber)"></span>
+          <h3>EMI & Pay Later</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>EMI Config</strong>: check EMI eligibility: available tenures, rates, and monthly installment</li>
+          <li><strong>Create EMI</strong>: convert a purchase to equated monthly installments</li>
+          <li><strong>EMI List</strong>: all EMI plans (active, closed, foreclosed)</li>
+          <li><strong>Foreclosure Details</strong>: exact charges to close an EMI early</li>
+          <li><strong>Foreclose EMI</strong>: close an EMI plan early and settle the remaining balance</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: var(--green-2)"></span>
+          <h3>Rewards & Points</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Rewards Summary</strong>: current points balance and value</li>
+          <li><strong>Rewards Ledger</strong>: per-entry earn/redeem/expire log</li>
+          <li><strong>Reward Account</strong>: earning rates, tier, multiplier configuration</li>
+          <li><strong>Reward Transactions</strong>: full earn/burn history with date ranges</li>
+          <li><strong>Expiring Rewards</strong>: points about to expire, with dates</li>
+          <li><strong>Credit Reward Points</strong>: add points (goodwill, promo)</li>
+          <li><strong>Debit Reward Points</strong>: redeem points as statement credit or voucher</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: #2d9cdb"></span>
+          <h3>Cashback</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Cashback Summary</strong>: total cashback earned in a date range</li>
+          <li><strong>Cashback Transactions</strong>: per-transaction cashback earned/pending/credited</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: #e67e22"></span>
+          <h3>Benefits & Perks</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Fetch Benefits</strong>: benefits available to this customer/account</li>
+          <li><strong>Fetch Benefits by Program</strong>: all benefits on the card program</li>
+          <li><strong>Subscribe to Benefit</strong>: opt in to a benefit (lounge access, insurance, partner offer)</li>
+          <li><strong>Unsubscribe from Benefit</strong>: opt out of a subscribed benefit</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
+          <span class="api-dot" style="background: var(--ink)"></span>
+          <h3>Disputes, Fees & Escalations</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Raise Dispute/Chargeback</strong>: file a formal dispute on a settled transaction, tracked per RBI timelines</li>
+          <li><strong>Track Dispute</strong>: check the status, provisional credit, and resolution timeline</li>
+          <li><strong>Initiate Refund</strong>: credit back an eligible transaction immediately</li>
+          <li><strong>Waive Fee</strong>: auto-waive a late/annual fee (max 1 per year, max ₹1,000, policy-gated)</li>
+          <li><strong>Create Escalation</strong>: escalate to a human operations team with full AI investigation summary</li>
+          <li><strong>Check Payment Status</strong>: verify whether a repayment was received and credited</li>
+          <li><strong>Fraud Liability Assessment</strong>: RBI-compliant limited-liability check within 3 working days</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section id="channels">
+    <div class="sec-head">
+      <h2>Connect with Kriya</h2>
+      <p>Reach Kriya instantly on the channels you already use. It recognizes your registered mobile number, loads your card account securely, and helps in plain language. No apps to install.</p>
+    </div>
+
+    <div class="grid">
+
+      <!-- Telegram -->
+      <article class="card" id="telegram-card">
+        <div class="card-top">
+          <span class="glyph">
+            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="12" fill="#229ED9"/>
+              <path fill="#fff" d="M5.45 11.77c3.74-1.63 6.23-2.7 7.48-3.22 3.56-1.48 4.3-1.74 4.78-1.75.11 0 .34.02.49.15.13.1.16.24.18.34.02.1.04.32.02.49-.19 1.98-1 6.78-1.42 9-.18.94-.53 1.25-.87 1.28-.74.07-1.3-.49-2.02-.96-1.12-.74-1.76-1.2-2.85-1.92-1.26-.83-.44-1.28.27-2.03.19-.19 3.43-3.14 3.49-3.41.01-.03.01-.16-.06-.22-.07-.07-.18-.05-.26-.03-.11.03-1.89 1.2-5.32 3.52-.5.35-.96.51-1.37.5-.45-.01-1.32-.25-1.96-.46-.79-.26-1.42-.39-1.36-.83.03-.22.34-.45.93-.68z"/>
+            </svg>
+          </span>
+          <h3>Telegram</h3>
+        </div>
+        <p class="lede">Chat with Kriya on Telegram. Free, secure, and no configuration needed.</p>
+        <ol class="steps">
+          <li>Click the button below to open the Kriya Bot in Telegram.</li>
+          <li>Send a message to start, and register your mobile number.</li>
+          <li>Ask questions about your card, block it in emergencies, or convert payments to EMI.</li>
+        </ol>
+        <div class="card-cta">
+          <a href="#" id="tg-chat-btn" target="_blank" class="btn" style="display: none;">
+            Chat on Telegram
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </article>
+
+      <!-- Web chat -->
+      <article class="card">
+        <div class="card-top">
+          <span class="glyph">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+          </span>
+          <h3>Web chat</h3>
+        </div>
+        <p class="lede">Manage your card right in your browser. Fully secure, real-time live account access.</p>
+        <ol class="steps">
+          <li>Open the web chat page and enter your registered mobile number.</li>
+          <li>Kriya pulls up your live account from the secure card system.</li>
+          <li>Ask about bills, check transactions, adjust limits, or manage rewards in real-time.</li>
+        </ol>
+        <div class="card-cta">
+          <a href="/chat" class="btn">
+            Open Web Chat
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </article>
+
+      <!-- Voice -->
+      <article class="card">
+        <div class="card-top">
+          <span class="glyph">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </span>
+          <h3>Voice</h3>
+        </div>
+        <p class="lede">Talk to Kriya in your own language. It understands Hindi, Hinglish, and English.</p>
+        <ol class="steps">
+          <li>Open the Web Chat in your browser.</li>
+          <li>Tap the microphone icon in the input area and speak naturally.</li>
+          <li>Kriya processes your speech and responds out loud in your language.</li>
+        </ol>
+        <div class="card-cta">
+          <a href="/chat" class="btn">
+            Try Voice Mode
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </article>
+
+    </div>
+
+    <!-- Hermes -->
+    <div class="hermes">
+      <h2>Hermes, the brain behind every channel</h2>
+      <p>Every inbound message takes the same path: match the sender's number to a live card account
+         (auto-provisioned from the card system of record on first contact), run the durable agent,
+         and reply on the channel it came from. Identity, memory, deterministic policy gates, an
+         identity check before risky actions, and a full audit trail come for free on every surface.</p>
+      <div class="flow">
+        <span class="step">Inbound message</span>
+        <span class="arr">→</span>
+        <span class="step">Match &amp; verify identity</span>
+        <span class="arr">→</span>
+        <span class="step">Agent resolves</span>
+        <span class="arr">→</span>
+        <span class="step">Reply &amp; audit</span>
+      </div>
     </div>
   </section>
 </main>
-<script>
-(() => {
-  const search = document.getElementById('customer-search');
-  const results = document.getElementById('sample-results');
-  const lookupError = document.getElementById('lookup-error');
 
-  const inr = (n) => '₹' + Number(n ?? 0).toLocaleString('en-IN');
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-  const maskedPhone = (phone) => {
-    const text = String(phone ?? '');
-    const digits = text.replace(/\D/g, '');
-    return digits.length >= 4 ? `${text.slice(0, 4)}••••${digits.slice(-4)}` : text;
-  };
-
-  function enterChat(customer) {
-    sessionStorage.setItem('customer', JSON.stringify(customer));
-    window.location.assign('/chat');
-  }
-
-  function renderCustomers(customers) {
-    if (!customers.length) {
-      results.innerHTML = '<div class="sidebar-loading">No matching customer.</div>';
-      return;
+<script type="module">
+  // Reveal the Telegram chat button only when this deployment has a bot linked
+  // (so we never hand out a dead t.me link).
+  const tgChatBtn = document.getElementById('tg-chat-btn');
+  try {
+    const cfg = await fetch('/api/web/config').then((r) => r.json());
+    if (cfg.channels?.telegram && cfg.telegram_username) {
+      tgChatBtn.href = `https://t.me/${cfg.telegram_username}`;
+      tgChatBtn.style.display = 'inline-flex';
     }
-    results.innerHTML = customers.map((c) => `
-      <button class="customer-row" type="button" data-id="${c.id}">
-        <span>
-          <strong>${esc(c.name)}</strong>
-          <small>${esc(c.email || '')}${c.phone ? ` · ${esc(maskedPhone(c.phone))}` : ''}</small>
-        </span>
-        <span class="customer-meta">
-          <b>**** ${esc(c.card_last4)}</b>
-          <small>CIBIL ${esc(c.cibil_score || 'NA')} · ${inr(c.outstanding_total)} due</small>
-        </span>
-      </button>
-    `).join('');
-    results.querySelectorAll('.customer-row').forEach((row) => {
-      row.addEventListener('click', async () => {
-        row.disabled = true;
-        const customer = customers.find((c) => String(c.id) === row.dataset.id);
-        const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ customer_id: customer.id }),
-        });
-        if (res.ok) enterChat(await res.json());
-        else row.disabled = false;
-      });
-    });
-  }
-
-  async function loadDemo() {
-    const res = await fetch('/api/customers/demo');
-    renderCustomers(res.ok ? await res.json() : []);
-  }
-
-  let timer;
-  search.addEventListener('input', () => {
-    lookupError.hidden = true;
-    clearTimeout(timer);
-    const q = search.value.trim();
-    timer = setTimeout(async () => {
-      if (q.length < 2) { loadDemo(); return; }
-      const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
-      renderCustomers(res.ok ? await res.json() : []);
-    }, 200);
-  });
-
-  loadDemo();
-})();
+  } catch { /* offline / error: leave the Telegram button hidden */ }
 </script>
 </body>
 </html>
+
