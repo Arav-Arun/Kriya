@@ -205,16 +205,16 @@ function bootChat(customer) {
     if (!suggestionsEl) return;
 
     const chips = [
-      'Block my card',
+      'Check my outstanding balance',
+      'View my recent transactions',
       'View my card controls & limits',
-      'Waive my late/annual fee',
-      'Convert a transaction to EMI',
-      'Cancel a subscription on autopay',
-      "What's the status of my dispute?",
-      "I see a charge I don't recognize",
-      'Redeem my reward points',
-      'Order a replacement card',
       'Download my latest statement',
+      'Check active EMI plans',
+      'Convert a purchase to EMI',
+      'Check rewards balance',
+      'Redeem my reward points',
+      'Block my card',
+      'Order a replacement card',
     ];
 
     suggestionsEl.innerHTML = chips

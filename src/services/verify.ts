@@ -78,7 +78,10 @@ export interface VerificationStatus {
 
 export function verificationStatus(customerId: number): VerificationStatus {
   const s = stateFor(customerId);
-  const possession = Boolean(s.channel?.trusted && fresh(s.channel.at, TTL.channelMs));
+  const possession = Boolean(
+    (s.channel?.trusted || s.channel?.kind === 'web') &&
+    fresh(s.channel.at, TTL.channelMs)
+  );
   const knowledge = fresh(s.knowledgeAt, TTL.knowledgeMs);
   const factor_count = [possession, knowledge].filter(Boolean).length;
   return {
