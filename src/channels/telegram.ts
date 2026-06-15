@@ -197,7 +197,7 @@ async function callTelegram(
   }
 }
 
-/** Prompt an unrecognised chat to share its registered number (one-tap button). */
+/** Prompt an unrecognised chat to share its registered number. */
 export async function requestContact(chatId: string): Promise<OutboundDelivery> {
   // Throttle so an unlinked chat can't be spammed with the keyboard on every
   // message (and so a webhook retry doesn't re-prompt). Treat a throttled
@@ -206,21 +206,28 @@ export async function requestContact(chatId: string): Promise<OutboundDelivery> 
   if (last && Date.now() - last < PROMPT_THROTTLE_MS) return { ok: true };
   if (lastPromptByChatId.size > MAX_BINDINGS) lastPromptByChatId.clear();
   lastPromptByChatId.set(chatId, Date.now());
-  // In UAT, invite typing the number too (the typed-identity path in
-  // parseTelegramUpdate) so a tester can use a Hyperface directory number
-  // without sharing their real Telegram contact.
-  const text = config.providerMode === 'hyperface_uat'
-    ? "Namaste! I'm Kriya, your card assistant. To pull up your account, reply with your registered 10-digit mobile number — or tap the button below to share it."
+  // In UAT, we ask for a typed mobile number and clear any Telegram custom keyboard
+  // so the user can easily type a test/sample number (like a Hyperface UAT directory number).
+  const isUat = config.providerMode === 'hyperface_uat';
+  const text = isUat
+    ? "Namaste! I'm Kriya, your card assistant. To pull up your card account, please reply with your registered 10-digit mobile number (e.g. 8398480550)."
     : "Namaste! I'm Kriya, your card assistant. To pull up your account, please share your registered mobile number using the button below.";
-  const r = await callTelegram('sendMessage', {
+  const payload: Record<string, any> = {
     chat_id: chatId,
     text,
-    reply_markup: {
+  };
+  if (isUat) {
+    payload.reply_markup = {
+      remove_keyboard: true,
+    };
+  } else {
+    payload.reply_markup = {
       keyboard: [[{ text: '📱 Share my number', request_contact: true }]],
       resize_keyboard: true,
       one_time_keyboard: true,
-    },
-  });
+    };
+  }
+  const r = await callTelegram('sendMessage', payload);
   return { ok: r.ok, providerMessageId: r.messageId, error: r.error };
 }
 
