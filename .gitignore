@@ -33,3 +33,6 @@ data/uploads/
 
 # Local test and utility scripts
 scripts/
+
+# Supabase database migrations
+supabase/
