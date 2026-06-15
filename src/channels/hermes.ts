@@ -74,10 +74,26 @@ async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
   const key = phoneKey(raw);
   if (key.length < 10) return null;
 
+  let match: any = null;
   const lookup = await hyperfaceProvider.lookupCustomer({ mobileNumber: key });
-  if (!lookup.ok || lookup.data.length === 0) return null;
-  const match = lookup.data[0];
-  const account = match.accounts.find((a) => a.status === 'ACTIVE') ?? match.accounts[0];
+  if (lookup.ok && lookup.data.length > 0) {
+    match = lookup.data[0];
+  } else {
+    const issuerRes = await hyperfaceProvider.fetchIssuerCustomer({ mobileNumber: key });
+    if (issuerRes.ok && issuerRes.data) {
+      const data = issuerRes.data as any;
+      const customer = Array.isArray(data) ? data[0] : data;
+      if (customer && (customer.customerId || customer.id)) {
+        match = {
+          customerId: customer.customerId || customer.id,
+          accounts: customer.accounts || [],
+        };
+      }
+    }
+  }
+
+  if (!match) return null;
+  const account = match.accounts.find((a: any) => a.status === 'ACTIVE') ?? match.accounts[0];
   if (!account) return null;
 
   const summary = await hyperfaceProvider.accountSummary(account.id);
@@ -98,7 +114,7 @@ async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
       : String(primaryCard?.cardStatus ?? 'active').toLowerCase(),
     credit_limit: summary.ok ? summary.data.account.approvedCreditLimit : undefined,
     available_limit: summary.ok ? summary.data.account.availableCreditLimit : undefined,
-    outstanding_total: summary.ok ? summary.data.account.currentBalance : undefined,
+    outstanding_total: summary.ok ? Math.max(0, -summary.data.account.currentBalance) : undefined,
   });
   if (!id) return null;
 

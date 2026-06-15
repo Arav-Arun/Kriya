@@ -22,7 +22,7 @@ import { assertActionAllowed } from './verify.ts';
 
 const liveEnabled = () => config.providerMode === 'hyperface_uat' && hyperfaceProvider.configured;
 
-// ── Customer → live account binding ─────────────────────────────────────
+// ── Customer → live account binding
 
 export interface LiveBinding {
   /** Provider customer id. Null for a demo_env binding when no test customer id
@@ -47,10 +47,26 @@ export async function resolveLiveBinding(customerId: number): Promise<LiveBindin
   const customer = await getCustomer(customerId);
   const phone = phoneKey(String(customer?.phone ?? ''));
   if (phone.length === 10) {
+    let match: any = null;
     const res = await hyperfaceProvider.lookupCustomer({ mobileNumber: phone });
     if (res.ok && res.data.length > 0) {
-      const match = res.data[0];
-      const account = match.accounts.find((a) => a.status === 'ACTIVE') ?? match.accounts[0];
+      match = res.data[0];
+    } else {
+      const issuerRes = await hyperfaceProvider.fetchIssuerCustomer({ mobileNumber: phone });
+      if (issuerRes.ok && issuerRes.data) {
+        const data = issuerRes.data as any;
+        const customer = Array.isArray(data) ? data[0] : data;
+        if (customer && (customer.customerId || customer.id)) {
+          match = {
+            customerId: customer.customerId || customer.id,
+            accounts: customer.accounts || [],
+          };
+        }
+      }
+    }
+
+    if (match) {
+      const account = match.accounts.find((a: any) => a.status === 'ACTIVE') ?? match.accounts[0];
       if (account) {
         binding = {
           hyperfaceCustomerId: match.customerId,

@@ -100,7 +100,7 @@ export const getCustomerProfileTool = defineTool({
             : String(live.primaryCard?.cardStatus ?? c.card_status).toLowerCase(),
           credit_limit: live.account.approvedCreditLimit,
           available_limit: live.account.availableCreditLimit,
-          outstanding_total: live.account.currentBalance,
+          outstanding_total: Math.max(0, -live.account.currentBalance),
           currency: live.account.currency ?? 'INR',
           source_note: 'balance/limits/card status are live from the card system of record; due date, CIBIL, risk, reward points and KYC have no live source and are shown only when on file (else "unavailable")',
         }
@@ -197,7 +197,7 @@ export const getOutstandingBalanceTool = defineTool({
       // genuinely on file; never present null as a real figure under a live response.
       return JSON.stringify({
         source: 'live_provider',
-        outstanding_total: live.account.currentBalance,
+        outstanding_total: Math.max(0, -live.account.currentBalance),
         credit_limit: live.account.approvedCreditLimit,
         available_limit: live.account.availableCreditLimit,
         currency: live.account.currency ?? 'INR',

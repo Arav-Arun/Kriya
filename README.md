@@ -4,13 +4,13 @@ An agentic, customer-facing operations copilot for an Indian credit card. A card
 
 Built on the [Flue framework](https://flueframework.com). One chat message is one Flue workflow.
 
-> **The Promise:** *Customer describes a credit-card issue by text or image. Flue agents retrieve account data, apply deterministic policy, execute safe operations directly in the database, and return a structured resolution receipt.*
+> **The Promise:** _Customer describes a credit-card issue by text or image. Flue agents retrieve account data, apply deterministic policy, execute safe operations directly in the database, and return a structured resolution receipt._
 
 ---
 
 ## Why Flue
 
-Sentinel is not a wrapper prompt with a chat box. Each turn is a durable, observable Flue workflow that orchestrates specialized agents and streams its operations to the browser as they run:
+Kriya is not a wrapper prompt with a chat box. Each turn is a durable, observable Flue workflow that orchestrates specialized agents and streams its operations to the browser as they run:
 
 ```
 customer message  ──▶  TRIAGE  ──▶  route?
@@ -31,13 +31,13 @@ customer message  ──▶  TRIAGE  ──▶  route?
 
 The pipeline enforces a strict **separation of concerns**: each agent has a single, well-defined role:
 
-| Agent | Role | Tools | Boundary |
-|-------|------|-------|----------|
-| **Sentinel Triage** | Classifies the customer's message, picks route (`direct` vs `analysis`), sets urgency | None (pure classification) | Never answers the customer |
-| **Sentinel Investigation** | Gathers raw account facts: profile, transactions, fees, EMIs, disputes, mandates | Read-only data tools | **Never makes eligibility decisions**; that's Resolution's job |
-| **Sentinel Policy** | Looks up the governing policy document, SLA, and eligibility rules | `search_policy` only | Reports rules; does not compute verdicts |
-| **Sentinel Precedent** | Finds how similar historical cases were resolved | `search_similar_cases` only | Cites only real case IDs from the database |
-| **Sentinel Resolution** | Holds the persistent customer session. **Sole authority** to run deterministic policy gates and execute card operations | All policy checks + all action tools | Owns decision-making and action execution |
+| Agent                      | Role                                                                                                                    | Tools                                | Boundary                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
+| **Sentinel Triage**        | Classifies the customer's message, picks route (`direct` vs `analysis`), sets urgency                                   | None (pure classification)           | Never answers the customer                                     |
+| **Sentinel Investigation** | Gathers raw account facts: profile, transactions, fees, EMIs, disputes, mandates                                        | Read-only data tools                 | **Never makes eligibility decisions**; that's Resolution's job |
+| **Sentinel Policy**        | Looks up the governing policy document, SLA, and eligibility rules                                                      | `search_policy` only                 | Reports rules; does not compute verdicts                       |
+| **Sentinel Precedent**     | Finds how similar historical cases were resolved                                                                        | `search_similar_cases` only          | Cites only real case IDs from the database                     |
+| **Sentinel Resolution**    | Holds the persistent customer session. **Sole authority** to run deterministic policy gates and execute card operations | All policy checks + all action tools | Owns decision-making and action execution                      |
 
 **Why Investigation doesn't have policy gate tools:** Policy gate checks require the action context that only the Resolution agent holds. If Investigation computed eligibility, the Resolution agent would inherit stale verdicts from a different execution context. By keeping Investigation as pure forensics and giving Resolution exclusive policy-gate authority, we ensure every decision is computed fresh against live data at the moment of action.
 
@@ -52,19 +52,26 @@ Every figure the customer sees is read from the database; nothing is mocked in t
 Core eligibility decisions are never left to the model's prose. Before any sensitive action, the Resolution agent must call a deterministic check in `src/services/policy-gates.ts` that computes the verdict from account data and returns a structured result:
 
 ```typescript
-{ eligible, reason_codes, facts_checked, missing_evidence, required_next_step, policy_reference }
+{
+  (eligible,
+    reason_codes,
+    facts_checked,
+    missing_evidence,
+    required_next_step,
+    policy_reference);
+}
 ```
 
 ### Policy Gates
 
-| Gate | Key Rules |
-|------|-----------|
-| **Late-fee waiver** | Max 1 per 12 months, fee ≤ ₹1,000, ≥80% on-time, **CIBIL ≥650** (below signals chronic delinquency), account not closed |
-| **Credit-limit increase** | Vintage ≥6 months, **CIBIL ≥730**, zero missed/late in 12 months, utilization 30-90% (>90% triggers affordability review), KYC current, auto-ceiling 150% of current, committee review above ₹10,00,000 |
-| **Duplicate-charge refund** | Both settled, same merchant + amount ±₹1 within 24h, reported within 60 days, not a recurring subscription pattern, no open dispute |
-| **EMI conversion** | Amount ≥₹2,500, SUCCESS status, within 30 days of transaction date, account current (no overdue), **CIBIL ≥650**, total EMI exposure ≤80% of credit limit, excluded categories (fuel, cash advances, wallet, gold) |
-| **E-mandate cancellation** | Mandate must exist and be active (RBI opt-out right), 24h pre-debit notice applies |
-| **Fraud liability timing** | RBI zero-liability ≤3 working days, capped ≤7 days, card must be blocked immediately, FIR required above ₹1,00,000, repeat fraud in 6 months triggers risk re-rating |
+| Gate                        | Key Rules                                                                                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Late-fee waiver**         | Max 1 per 12 months, fee ≤ ₹1,000, ≥80% on-time, **CIBIL ≥650** (below signals chronic delinquency), account not closed                                                                                            |
+| **Credit-limit increase**   | Vintage ≥6 months, **CIBIL ≥730**, zero missed/late in 12 months, utilization 30-90% (>90% triggers affordability review), KYC current, auto-ceiling 150% of current, committee review above ₹10,00,000            |
+| **Duplicate-charge refund** | Both settled, same merchant + amount ±₹1 within 24h, reported within 60 days, not a recurring subscription pattern, no open dispute                                                                                |
+| **EMI conversion**          | Amount ≥₹2,500, SUCCESS status, within 30 days of transaction date, account current (no overdue), **CIBIL ≥650**, total EMI exposure ≤80% of credit limit, excluded categories (fuel, cash advances, wallet, gold) |
+| **E-mandate cancellation**  | Mandate must exist and be active (RBI opt-out right), 24h pre-debit notice applies                                                                                                                                 |
+| **Fraud liability timing**  | RBI zero-liability ≤3 working days, capped ≤7 days, card must be blocked immediately, FIR required above ₹1,00,000, repeat fraud in 6 months triggers risk re-rating                                               |
 
 The agent only acts on `eligible: true`; otherwise it explains the reason codes or collects the missing evidence. The e-mandate model (`src/services/emandates.ts`) is pure and deterministic; agents explain mandate terms but never invent them.
 
@@ -109,7 +116,7 @@ To run a demo for fintech leadership:
 1. **Login**: Open `http://localhost:3583/` and click on **Rohan Mehta** to sign in.
 2. **Explore Account Tab**: Click **Account** in the header. Note Rohan's active limits, his Netflix e-mandate of ₹649/mo, and active card control switches.
 3. **Toggle Card Controls**: Turn off **International Transactions** or **Online Transactions** using the switches. Notice the sidebar snapshot updates immediately. Click the **Resolution Records** tab to see the change audited in the "Audit Trail" list.
-4. **Late-Fee Goodwill Waiver**: 
+4. **Late-Fee Goodwill Waiver**:
    - Switch to **Chat** and type: `"I paid 1 day late, please waive the fee."`
    - Observe the live stages: Triage → Investigation ∥ Policy Check ∥ Precedent Review → Resolution.
    - Sentinel evaluates Rohan's record (CIBIL 807, 100% on-time payments, no waiver in the last 12 months) and waives the fee.
@@ -186,6 +193,7 @@ data/                             # Runtime data (uploads, local Flue SQLite)
 ## Known Demo Limitations
 
 These are documented limitations for the demo workspace:
+
 1. **Real Payment Gateways**: Payment simulation is executed via direct PostgreSQL mutations rather than actual integrations (e.g. Razorpay/BillDesk).
 2. **Vision Model Requirements**: Attachment analysis requires a vision-capable LLM. If the key is missing or fails, it falls back to a descriptive text note.
 3. **Local Run-State Fallback**: Flue workflow runs use PostgreSQL when `DATABASE_URL` is set, falling back to local SQLite if unset.
@@ -195,6 +203,7 @@ These are documented limitations for the demo workspace:
 ## Setup & Deployment
 
 ### Prerequisites
+
 - Node.js ≥ 22.18
 - Supabase credentials + an OpenAI API Key
 

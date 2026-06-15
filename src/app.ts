@@ -152,7 +152,7 @@ app.get('/api/customer/:id/profile', async (c) => {
     card_variant: customer.card_variant,
     credit_limit: live ? live.account.approvedCreditLimit : customer.credit_limit,
     available_limit: live ? live.account.availableCreditLimit : customer.available_limit,
-    outstanding_total: live ? live.account.currentBalance : customer.outstanding_total,
+    outstanding_total: live ? Math.max(0, -live.account.currentBalance) : customer.outstanding_total,
     minimum_due: customer.minimum_due,
     due_date: customer.due_date, reward_points: customer.reward_points_balance,
     cibil_score: customer.cibil_score, kyc_status: customer.kyc_status,
