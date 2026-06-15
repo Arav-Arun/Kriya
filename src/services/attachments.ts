@@ -1,8 +1,5 @@
-// Upload analysis: every file the customer uploads (statement PDF/CSV/TXT or
-// evidence image) goes through one path — extract what we can locally, then
-// let the model read it. The summary becomes evidence the agents can use.
-// Storage itself goes through src/services/storage.ts (Supabase Storage in
-// production, local filesystem in development).
+// Analyze customer uploads (statement PDF/CSV/TXT or evidence images).
+// Extracts text locally or via OpenAI Responses API (POST https://api.openai.com/v1/responses).
 import path from 'node:path';
 
 export type AttachmentType = 'statement' | 'evidence';

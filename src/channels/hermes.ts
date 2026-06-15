@@ -1,9 +1,4 @@
-// Hermes: the Kriya channel agent. Takes a normalized inbound message from
-// any channel adapter, matches the sender to a card customer, runs the same
-// durable chat-turn workflow the web copilot uses, and delivers the reply
-// back on the channel. Every exchange is recorded (channel_messages table
-// when present, in-memory otherwise) and deduplicated by provider message id
-// so webhook retries never run the pipeline twice.
+// Hermes dispatcher: maps inbound channel messages to the Flue workflow, persists messages, and routes replies.
 import { supabase } from '../database/client.ts';
 import { config } from '../config/env.ts';
 import { createCustomerFromLive, ProvisioningError } from '../database/queries.ts';
@@ -13,7 +8,7 @@ import { phoneKey } from './types.ts';
 import type { ChannelAdapter, ChannelKind, InboundChannelMessage } from './types.ts';
 import { telegramAdapter, rememberContact as rememberTelegramBinding } from './telegram.ts';
 
-/** Outbound adapter registry for proactive (provider-event) delivery. */
+// Outbound adapter registry for proactive delivery.
 const ADAPTERS: Partial<Record<ChannelKind, ChannelAdapter>> = {
   telegram: telegramAdapter,
 };
@@ -25,7 +20,7 @@ interface MatchedCustomer {
   card_number_last4: string;
 }
 
-// ── Customer matching (last-10-digit phone key, 60s cache) ───────────
+// Match customer by last 10 digits of phone (60s in-memory cache).
 let phoneCache: { at: number; byKey: Map<string, MatchedCustomer> } | null = null;
 
 async function customerByPhone(raw: string): Promise<MatchedCustomer | null> {
@@ -44,31 +39,18 @@ async function customerByPhone(raw: string): Promise<MatchedCustomer | null> {
   return phoneCache.byKey.get(key) ?? null;
 }
 
-/** Resolve a registered mobile number to a Kriya customer id (provider webhook
- *  routing). Shares the same last-10-digit cache as inbound matching. */
+// Resolve registered mobile to customer ID (calls local database).
 export async function customerIdByPhone(raw: string): Promise<number | null> {
   const match = await customerByPhone(raw);
   return match?.id ?? null;
 }
 
-/**
- * Web sign-in: match a mobile number to a Kriya customer, provisioning one from
- * the live card provider on first contact — the exact identity path an inbound
- * channel message takes. Returns null when the provider has no card account on
- * this number (or live mode is off), which the API surfaces as "not found".
- */
+// Web sign-in identity matching. Matches or provisions customer.
 export async function identifyByPhone(raw: string): Promise<MatchedCustomer | null> {
   return (await customerByPhone(raw)) ?? (await provisionFromLive(raw));
 }
 
-/**
- * Identity from the API: when an unknown number messages in, look it up in the
- * card provider (POST /customers/lookup) and provision a customer row from the
- * live account — name, email, card last-4 and figures all come from the system
- * of record. The row anchors chat memory/audit; the live binding (phone_lookup)
- * then serves all account data API-first. Returns null when the provider has
- * no account on this number (genuine stranger) or live mode is off.
- */
+// Provision local customer profile from live Hyperface provider if found.
 async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
   if (config.providerMode !== 'hyperface_uat' || !hyperfaceProvider.configured) return null;
   const key = phoneKey(raw);
@@ -125,24 +107,20 @@ async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
   return created;
 }
 
-// ── Conversation continuity + message persistence ─────────────────────
-// channel_messages columns (see db/migrations): channel, direction, peer,
-// customer_id, conversation_id, provider_message_id, body, meta, created_at.
+// Message history and database persistence.
 const seenProviderIds = new Set<string>();
 const conversationByPeer = new Map<string, number>();
-// Where each customer last reached us, so proactive provider-event alerts go
-// back on the same surface. Survives only in-process (best-effort routing);
-// the durable record is channel_messages.
 const lastChannelByCustomer = new Map<number, { channel: ChannelKind; peer: string }>();
 let channelTableMissing = false;
 
+// Check if message was already processed (in-memory & db deduplication).
 async function alreadyProcessed(msg: InboundChannelMessage): Promise<boolean> {
   const memoryKey = `${msg.channel}:${msg.providerMessageId}`;
   if (seenProviderIds.has(memoryKey)) return true;
   if (!channelTableMissing) {
     const { data, error } = await supabase.from('channel_messages')
       .select('id').eq('channel', msg.channel).eq('provider_message_id', msg.providerMessageId).limit(1);
-    if (error) channelTableMissing = true; // table not migrated yet — in-memory dedupe only
+    if (error) channelTableMissing = true;
     else if ((data ?? []).length > 0) return true;
   }
   seenProviderIds.add(memoryKey);
@@ -150,6 +128,7 @@ async function alreadyProcessed(msg: InboundChannelMessage): Promise<boolean> {
   return false;
 }
 
+// Log message to database.
 async function recordMessage(input: {
   channel: string; direction: 'inbound' | 'outbound'; peer: string;
   customerId: number | null; conversationId: number | null;
@@ -170,21 +149,22 @@ async function recordMessage(input: {
   if (error) channelTableMissing = true;
 }
 
+// Get the last active conversation ID for a peer.
 async function lastConversationFor(channel: string, peer: string): Promise<number | null> {
   const key = `${channel}:${phoneKey(peer)}`;
   if (conversationByPeer.has(key)) return conversationByPeer.get(key)!;
   if (channelTableMissing) return null;
   const { data, error } = await supabase.from('channel_messages')
-    .select('conversation_id').eq('channel', channel).eq('peer', phoneKey(peer))
-    .not('conversation_id', 'is', null)
-    .order('id', { ascending: false }).limit(1).maybeSingle();
+     .select('conversation_id').eq('channel', channel).eq('peer', phoneKey(peer))
+     .not('conversation_id', 'is', null)
+     .order('id', { ascending: false }).limit(1).maybeSingle();
   if (error) { channelTableMissing = true; return null; }
   const id = data?.conversation_id == null ? null : Number(data.conversation_id);
   if (id) conversationByPeer.set(key, id);
   return id;
 }
 
-// ── Pipeline dispatch (same durable workflow as the web copilot) ─────
+// Dispatch request to Flue workflow (calls POST /workflows/chat-turn?wait=result).
 interface TurnResult {
   reply: string;
   conversation_id?: number;
@@ -218,9 +198,7 @@ const UNMATCHED_REPLY =
   'Namaste! This is Kriya, your card assistant. I could not match this number to a card account. '
   + 'Please message from your registered mobile number, or contact your bank to update your contact details.';
 
-// Distinct from UNMATCHED_REPLY: the card account WAS found, but provisioning the
-// local profile failed (e.g. a pending DB migration). Never tell a real customer
-// their number isn't registered when the account actually exists.
+// Fallback response for database failures during provisioning.
 const SETUP_FAILED_REPLY =
   'Namaste! I found your card account but could not finish setting up your profile just now. '
   + 'This is a temporary issue on our side — please try again in a few minutes.';
@@ -237,10 +215,7 @@ export interface HermesOutcome {
   delivery?: { ok: boolean; error?: string };
 }
 
-/**
- * Handle one inbound channel message end-to-end. `deliver=false` lets the
- * simulator render the reply itself instead of sending through the adapter.
- */
+// Process inbound messages end-to-end.
 export async function handleInbound(
   msg: InboundChannelMessage,
   adapter: ChannelAdapter | null,
@@ -249,8 +224,7 @@ export async function handleInbound(
     return { matched: false, deduped: true, reply: '' };
   }
 
-  // Records on file first (cheap), then the provider API: an unknown number
-  // with a live card account gets provisioned on the spot.
+  // Lookup in database first, then fall back to live Hyperface provider.
   let customer: MatchedCustomer | null;
   try {
     customer = await customerByPhone(msg.from) ?? await provisionFromLive(msg.from);
@@ -288,9 +262,6 @@ export async function handleInbound(
     meta: { profile_name: msg.profileName },
   });
 
-  // Possession factor: a real adapter means the message arrived through a
-  // verified provider webhook bound to the registered number. The simulator
-  // (adapter=null) simulates that trust for dev flows.
   const turn = await runChatTurn(customer.id, conversationId, msg.text, {
     kind: msg.channel,
     peer: phoneKey(msg.from),
@@ -321,21 +292,13 @@ export async function handleInbound(
   };
 }
 
-// ── Telegram durable binding (survives restart) ───────────────────────
-// The Telegram adapter learns phone<->chat_id from a contact share, but that map
-// is in-memory. Proactive alerts route by phone from the durable channel_messages
-// table, so after a restart the chat_id is gone and a fraud/transaction alert
-// would silently fail to deliver. We persist the chat_id in channel_messages.meta
-// on the contact share and rehydrate the map before a proactive Telegram send.
-
-/** Persist a Telegram phone<->chat_id binding (called on contact share) so the
- *  in-memory map can be rebuilt after a restart. Best-effort, never throws. */
+/** Persist Telegram binding for rehydration */
 export async function rememberTelegramContact(
   phone: string,
   chatId: string,
   profileName?: string,
 ): Promise<void> {
-  rememberTelegramBinding(phone, chatId); // bind in-memory now
+  rememberTelegramBinding(phone, chatId);
   const customer = await customerByPhone(phone).catch(() => null);
   await recordMessage({
     channel: 'telegram', direction: 'inbound', peer: phone,
@@ -345,8 +308,6 @@ export async function rememberTelegramContact(
   });
 }
 
-/** Rebuild the in-memory Telegram chat_id for a phone from the most recent
- *  persisted contact binding, so proactive sends work after a restart. */
 async function rehydrateTelegramBinding(peer: string): Promise<void> {
   if (channelTableMissing) return;
   const { data, error } = await supabase.from('channel_messages')
@@ -358,15 +319,12 @@ async function rehydrateTelegramBinding(peer: string): Promise<void> {
     try {
       const m = typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta;
       chatId = m?.telegram_chat_id;
-    } catch { /* ignore malformed meta */ }
+    } catch { /* ignore */ }
     if (chatId) { rememberTelegramBinding(peer, String(chatId)); return; }
   }
 }
 
-// ── Proactive outbound (provider events → customer's channel) ──────────
-
-/** Resolve the channel + peer to reach a customer on: in-memory last channel
- *  first, then the most recent inbound row in channel_messages. */
+// Route proactive alerts to customer channel
 async function routeFor(customerId: number): Promise<{ channel: ChannelKind; peer: string } | null> {
   const cached = lastChannelByCustomer.get(customerId);
   if (cached) return cached;
@@ -387,12 +345,7 @@ export interface NotifyOutcome {
   reason?: string;
 }
 
-/**
- * Send a proactive message to a customer on their last-used channel. Used by
- * the provider webhook receiver to push transaction/fraud/payment alerts.
- * No-op (delivered=false) when we don't know where to reach them or the
- * channel's adapter isn't configured — never throws into the webhook path.
- */
+// Send a proactive message (transaction, payment, fraud alerts) to the customer on their last-used channel.
 export async function notifyCustomer(
   customerId: number,
   text: string,
@@ -404,8 +357,7 @@ export async function notifyCustomer(
   if (!adapter || !adapter.configured) {
     return { delivered: false, channel: route.channel, reason: `Channel ${route.channel} has no configured outbound adapter.` };
   }
-  // Telegram routes by phone but sends by chat_id; rebuild the binding from the
-  // durable store in case this process restarted since the customer linked.
+  // Re-learn Telegram chat ID binding if process restarted.
   if (route.channel === 'telegram') await rehydrateTelegramBinding(route.peer);
   const delivery = await adapter.sendText(route.peer, text);
   await recordMessage({

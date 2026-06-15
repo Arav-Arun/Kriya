@@ -1,20 +1,6 @@
-// Hyperface UAT provider. Auth is two headers: `apikey: <secret key>` plus
-// `x-tenant-id` (datasource selector; "DEFAULT" for our programs — confirmed
-// by Hyperface). Several API groups are still permission-gated for our key
-// and return 403 "Forbidden resource"; those map to PERMISSION_PENDING so the
-// chat agent can fall back to account records on file and say so honestly.
-// Verified live (2026-06-12): customers/lookup and accounts/{id}/summary
-// return full data; transactions/statements/cards/EMI/rewards/cashback/
-// webhooks pending key enablement.
-//
-// This client mirrors the documented Credit Stack surface (see
-// https://hyperface.stoplight.io/docs/credit-stack-apis) — Customer, Accounts,
-// Card Issuing/Management, Transactions, Nudges, EMI, Benefits, Rewards,
-// Cashback, Webhooks — grouped by the docs' categories in types.ts. Only the
-// two endpoints noted above are live-verified; the rest are documented
-// (unverified) and follow the documented method/path conventions but could not
-// be live-verified (UAT down); reconcile their request/response shapes against
-// the spec via scripts/hyperface-smoke.mjs before relying on them.
+// Hyperface API client implementation mirroring Credit Stack APIs.
+// Base URL and versioning set via configs. Live endpoints: customers/lookup, accounts/{id}/summary.
+// See Credit Stack spec: https://hyperface.stoplight.io/docs/credit-stack-apis
 import { randomUUID } from 'node:crypto';
 import { config } from '../config/env.ts';
 import type {
@@ -142,7 +128,7 @@ export const hyperfaceProvider: CardProvider = {
   name: 'hyperface',
   get configured() { return config.hyperface.configured; },
 
-  // ── Customer ─────────────────────────────────────────────────────────────
+  // Customer endpoints
   createCustomer: (input, o) => call('/customers/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   fetchCustomer: (customerId) => call(`/customers/${customerId}`, { method: 'GET' }),
   updateCustomer: (customerId, input, o) => call(`/customers/${customerId}`, { method: 'POST', body: input, idempotencyKey: idem(o) }),
@@ -161,7 +147,7 @@ export const hyperfaceProvider: CardProvider = {
   updateIssuerCustomer: (input, o) => call('/customers/issuer/update', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   fetchIssuerCustomer: (input) => call('/customers/issuer/fetch', { method: 'POST', body: input }),
 
-  // ── Accounts (Credit Card) ───────────────────────────────────────────────
+  // Accounts (Credit Card) endpoints
   createCreditAccount: (input, o) => call('/accounts/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   createPaylaterAccount: (input, o) => call('/accounts/paylater/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   updateBillCycle: (accountId, input, o) => call(`/accounts/${accountId}/billCycle`, { method: 'PUT', body: input, idempotencyKey: idem(o) }),
@@ -170,11 +156,11 @@ export const hyperfaceProvider: CardProvider = {
   accountDetails: (accountId) => call(`/accounts/${accountId}`, { method: 'GET' }),
   updateAccountStatus: (accountId, input, o) => call(`/accounts/${accountId}/status`, { method: 'PUT', body: input, idempotencyKey: idem(o) }),
 
-  // ── Card Issuing ─────────────────────────────────────────────────────────
+  // Card Issuing endpoints
   createCard: (input, o) => call('/cards', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   cardDetails: (cardId) => call(`/cards/${cardId}`, { method: 'GET' }),
 
-  // ── Card Management ──────────────────────────────────────────────────────
+  // Card Management endpoints
   activateCard: (cardId, input, o) => call(`/cards/${cardId}/activate`, { method: 'POST', body: input ?? {}, idempotencyKey: idem(o) }),
   issuePhysicalCard: (cardId, input, o) => call(`/cards/${cardId}/physical`, { method: 'POST', body: input ?? {}, idempotencyKey: idem(o) }),
   setCardPin: (cardId, input, o) => call(`/cards/${cardId}/pin`, { method: 'POST', body: input, idempotencyKey: idem(o) }),
@@ -185,7 +171,7 @@ export const hyperfaceProvider: CardProvider = {
   cardControls: (cardId) => call(`/cards/${cardId}/cardControls`, { method: 'GET' }),
   setCardControls: (cardId, controls, o) => call(`/cards/${cardId}/cardControls`, { method: 'POST', body: controls, idempotencyKey: idem(o) }),
 
-  // ── Transactions ─────────────────────────────────────────────────────────
+  // Transactions endpoints
   statements: (accountId, range) => call(`/accounts/${accountId}/statements`, { method: 'POST', body: range ?? defaultStatementWindow() }),
   downloadStatement: (accountId, statementId) => call(`/accounts/${accountId}/statements/${statementId}/download`, { method: 'GET', expectText: true }),
   transactions: (accountId, f) => call(`/accounts/${accountId}/transactions`, { method: 'POST', body: f ?? {} }),
@@ -195,10 +181,10 @@ export const hyperfaceProvider: CardProvider = {
   debitTransaction: (input, o) => call('/accounts/createDebitTransaction', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   creditTransaction: (input, o) => call('/accounts/createCreditTransaction', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
-  // ── Nudges ───────────────────────────────────────────────────────────────
+  // Nudges endpoints
   nudges: (accountId) => call(`/accounts/${accountId}/nudges`, { method: 'GET' }),
 
-  // ── EMI ──────────────────────────────────────────────────────────────────
+  // EMI endpoints
   emiConfig: (accountId, q) => {
     // GET /accounts/emi?accountId=&amount=|txnRefId=&emiType=. The provider
     // requires EITHER a positive amount OR a txnRefId; emiType selects which
@@ -214,13 +200,13 @@ export const hyperfaceProvider: CardProvider = {
   forecloseEmi: (input, o) => call('/accounts/emi/foreclose', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   foreclosureDetails: (input) => call('/accounts/emi/foreclosureDetails', { method: 'POST', body: input }),
 
-  // ── Benefits ─────────────────────────────────────────────────────────────
+  // Benefits endpoints
   fetchBenefits: (input) => call('/benefits/fetch', { method: 'POST', body: input }),
   fetchBenefitsByProgram: (input) => call('/benefits/fetchByProgram', { method: 'POST', body: { programId: input.programId ?? config.hyperface.programId } }),
   subscribeBenefit: (input, o) => call('/benefits/subscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   unsubscribeBenefit: (input, o) => call('/benefits/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
-  // ── Rewards ──────────────────────────────────────────────────────────────
+  // Rewards endpoints
   rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId } }),
   rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId } }),
   creditRewardPoints: (input, o) => call('/rewards/credit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
@@ -229,18 +215,18 @@ export const hyperfaceProvider: CardProvider = {
   rewardAccount: (input) => call('/rewards/account', { method: 'POST', body: input }),
   rewardTransactions: (input) => call('/rewards/transactions', { method: 'POST', body: input }),
 
-  // ── Cashback ─────────────────────────────────────────────────────────────
+  // Cashback endpoints
   cashbackSummary: (accountId, range) => call('/cashback/summary/fetch', { method: 'POST', body: { accountId, ...range } }),
   cashbackTransactions: (accountId, range) => call('/cashback/transactions/fetch', { method: 'POST', body: { accountId, ...range } }),
 
-  // ── Webhooks ─────────────────────────────────────────────────────────────
+  // Webhooks endpoints
   webhookSubscribe: (input, o) => call('/event/webhook/subscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   webhookUnsubscribe: (input, o) => call('/event/webhook/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   webhookPause: (input, o) => call('/event/webhook/pause', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   webhookResume: (input, o) => call('/event/webhook/resume', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   webhookFetchSubscriptions: (q) => call('/event/webhook/fetchSubscriptions', { method: 'POST', body: q }),
 
-  // ── Aux ───────────────────────────────────────────────────────────────────
+  // Aux endpoints
   // documented, unverified — path/shape inferred from the spec; reconcile when
   // UAT is back. Kept because get_live_payment_status (provider-tools.ts) calls it.
   paymentStatus: (q) => call('/accounts/payment/status', { method: 'POST', body: q }),

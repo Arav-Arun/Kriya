@@ -1,7 +1,4 @@
-// Evidence/upload storage abstraction. Production stores evidence in Supabase
-// Storage; the local filesystem is a development-only convenience. The
-// storage_path recorded on attachments is either `supabase://bucket/key` or an
-// absolute local path, so existing rows keep working.
+// Upload storage service (Supabase Storage in production, local folder in dev).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';

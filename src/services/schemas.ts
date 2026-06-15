@@ -1,5 +1,4 @@
-// Structured outputs for the specialist agents. Flue validates each agent's
-// answer against these before the workflow sees it.
+// Structured outputs schemas for Flue specialist agents.
 import * as v from 'valibot';
 
 export const CATEGORIES = [
@@ -17,7 +16,7 @@ export const TEAMS = [
   'Customer Service', 'Risk Operations',
 ] as const;
 
-// Triage: decides whether this turn needs the parallel specialist fan-out.
+// Triage schema
 export const TriageRouting = v.object({
   route: v.picklist(['direct', 'analysis']),
   category: v.picklist(CATEGORIES),
@@ -26,7 +25,7 @@ export const TriageRouting = v.object({
 });
 export type TriageRouting = v.InferOutput<typeof TriageRouting>;
 
-// Investigation: customer-data forensics.
+// Investigation schema
 export const InvestigationFindings = v.object({
   findings: v.array(v.string()),
   relevant_transactions: v.array(v.object({
@@ -41,7 +40,7 @@ export const InvestigationFindings = v.object({
 });
 export type InvestigationFindings = v.InferOutput<typeof InvestigationFindings>;
 
-// Policy: governing policy and eligibility.
+// Policy schema
 export const PolicyFindings = v.object({
   policy_id: v.string(),
   policy_name: v.string(),

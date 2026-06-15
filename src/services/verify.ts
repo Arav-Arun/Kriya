@@ -26,7 +26,7 @@
 import { defineTool, Type } from '@flue/runtime';
 import { getCustomer, logAction } from '../database/queries.ts';
 
-// ── Stores ───────────────────────────────────────────────────────────────
+// Verification state stores
 
 interface ChannelBinding { kind: string; peer: string; trusted: boolean; at: number }
 interface VerifyState {
@@ -51,7 +51,7 @@ function fresh(at: number | undefined, ttlMs: number): boolean {
   return at != null && Date.now() - at < ttlMs;
 }
 
-// ── Risk classification ──────────────────────────────────────────────────
+// Risk classification rules
 
 /** Actions that move money, loosen security, or are irreversible. Each needs
  *  BOTH identity factors (trusted-channel possession + card-last-4 knowledge)
@@ -184,7 +184,7 @@ export async function handleVerificationReply(
   return { handled: false };
 }
 
-// ── Agent tools ──────────────────────────────────────────────────────────
+// Agent tools
 
 export const getVerificationStatusTool = defineTool({
   name: 'get_verification_status',

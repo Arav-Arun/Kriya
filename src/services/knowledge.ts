@@ -1,10 +1,10 @@
-// Markdown knowledge base access: the bank's internal policy documents.
+// Local markdown search for internal bank policy documents.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tokenize } from '../database/queries.ts';
 
-// Walk up from this file (src or dist) to the project root holding knowledge/.
+// Resolve project root containing the knowledge/ folder.
 let ROOT = path.dirname(fileURLToPath(import.meta.url));
 while (ROOT !== path.dirname(ROOT) && !existsSync(path.join(ROOT, 'knowledge'))) {
   ROOT = path.dirname(ROOT);

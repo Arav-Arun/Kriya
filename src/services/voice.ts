@@ -1,19 +1,16 @@
-// Sarvam voice for the web chat's voice mode: speech-to-text (saarika) and
-// text-to-speech (bulbul). Thin wrappers over Sarvam's REST API — the routes
-// in app.ts call these. Everything throws a clear error when SARVAM_API_KEY is
-// unset, and callers surface that as a 503 rather than crashing the chat.
+// Sarvam Voice STT and TTS services.
+// Calls:
+// - POST https://api.sarvam.ai/speech-to-text
+// - POST https://api.sarvam.ai/text-to-speech
 import { config } from '../config/env.ts';
 import { supabase } from '../database/client.ts';
 
 const STT_URL = 'https://api.sarvam.ai/speech-to-text';
 const TTS_URL = 'https://api.sarvam.ai/text-to-speech';
-// bulbul:v2 female voice; its per-request hard limit is 1500 chars.
 const TTS_SPEAKER = 'anushka';
 const TTS_MAX_CHARS = 1400;
 
-// Languages bulbul can speak. We map the STT-detected language onto this set;
-// anything else (incl. plain English) falls back to en-IN, which handles
-// English and Hinglish replies well.
+// Supported Indian languages for TTS. Fallback is en-IN.
 const SARVAM_LANGS = new Set([
   'bn-IN', 'en-IN', 'gu-IN', 'hi-IN', 'kn-IN', 'ml-IN',
   'mr-IN', 'od-IN', 'pa-IN', 'ta-IN', 'te-IN',
@@ -29,11 +26,7 @@ export interface Transcription {
   languageCode: string | null;
 }
 
-/**
- * Transcribe a recorded audio clip. `audio` is the blob the browser recorded
- * (webm/opus on Chrome, mp4 on Safari — both accepted by Sarvam).
- * language_code="unknown" lets saarika auto-detect across Indian languages.
- */
+// Transcribe audio using STT API.
 export async function transcribe(
   audio: Blob,
   filename = 'audio.webm',
@@ -82,11 +75,7 @@ export async function transcribe(
   return { transcript: String(data.transcript ?? '').trim(), languageCode: data.language_code ?? null };
 }
 
-/**
- * Turn an assistant reply into one or more base64 WAV clips. Markdown is
- * stripped to a speakable form and chunked to bulbul's per-request limit; the
- * client plays the clips back to back so long answers still read aloud fully.
- */
+// Synthesize text to speech using TTS API.
 export async function synthesize(text: string, languageCode?: string | null): Promise<string[]> {
   if (!voiceEnabled()) throw new Error('Voice is not configured.');
 
@@ -122,7 +111,7 @@ export async function synthesize(text: string, languageCode?: string | null): Pr
   return audios;
 }
 
-/** Generate a 0.5-second valid 8kHz 8-bit mono silent PCM WAV file as a base64 string */
+// Generate a 0.5-second 8kHz silent WAV file as base64.
 function generateSilentWavBase64(seconds = 0.5): string {
   const sampleRate = 8000;
   const numSamples = Math.floor(sampleRate * seconds);
@@ -155,7 +144,7 @@ function generateSilentWavBase64(seconds = 0.5): string {
   return buffer.toString('base64');
 }
 
-/** Strip markdown and symbols so the spoken version reads cleanly. */
+// Strip markdown and symbols for spoken text compatibility.
 function speakable(text: string): string {
   return String(text ?? '')
     .replace(/```[\s\S]*?```/g, ' ')          // code fences
@@ -170,7 +159,7 @@ function speakable(text: string): string {
     .trim();
 }
 
-/** Pack sentences into ≤max-char chunks; hard-split any single huge sentence. */
+// Split text into max-length chunks for the TTS speaker limit.
 function chunkText(text: string, max: number): string[] {
   if (text.length <= max) return [text];
   const parts = text.match(/[^.!?]+[.!?]*\s*/g) ?? [text];

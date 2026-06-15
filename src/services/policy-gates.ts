@@ -53,7 +53,7 @@ const firstNextStep = (
   fallback: string,
 ): string => branches.find(([when]) => when)?.[1] ?? fallback;
 
-// ── date helpers ──────────────────────────────────────────────────────
+// Date helpers
 const DAY = 86_400_000;
 const parseDate = (v: unknown): Date | null => {
   const d = new Date(String(v ?? ''));
@@ -78,7 +78,7 @@ function workingDaysBetween(from: Date, to: Date): number {
   return count;
 }
 
-// ── 1. Late fee waiver ────────────────────────────────────────────────
+// 1. Late fee waiver policy gate
 // Rule: max 1 waiver per 12 months, fee ≤ ₹1,000, ≥80% on-time record,
 // CIBIL ≥650 (critically low CIBIL signals chronic delinquency → no goodwill),
 // account must not be under fraud investigation or KYC freeze.
@@ -141,7 +141,7 @@ async function checkLateFeeWaiver(customerId: number, feeId?: number): Promise<P
   });
 }
 
-// ── 2. Credit limit increase ──────────────────────────────────────────
+// 2. Credit limit increase policy gate
 // Policy POL-009: vintage ≥6 months, CIBIL ≥730, zero missed/late in 12 months,
 // utilization 30-90% (>90% triggers affordability review), no active fraud
 // investigation or KYC freeze, auto-approval ceiling = 150% of current limit,
@@ -215,7 +215,7 @@ async function checkCreditLimitIncrease(customerId: number, requestedLimit?: num
   });
 }
 
-// ── 3. Duplicate charge refund ────────────────────────────────────────
+// 3. Duplicate charge refund policy gate
 // Policy POL-001: both transactions settled, reported within 60 days of
 // statement date, same merchant + identical/near-identical amount within 24h,
 // must not match recurring subscription pattern, account in good standing.
@@ -308,7 +308,7 @@ async function checkDuplicateRefund(customerId: number, transactionId?: string):
   });
 }
 
-// ── 4. E-mandate cancellation / opt-out ───────────────────────────────
+// 4. E-mandate cancellation / opt-out policy gate
 async function checkEmandateCancellation(customerId: number, subscriptionId?: string): Promise<PolicyVerdict> {
   const POL = 'RBI e-mandate framework · standing-instruction opt-out';
   const subs = await getSubscriptions(customerId) as any[];
@@ -339,7 +339,7 @@ async function checkEmandateCancellation(customerId: number, subscriptionId?: st
   });
 }
 
-// ── 5. EMI conversion ─────────────────────────────────────────────────
+// 5. EMI conversion policy gate
 // Policy POL-004: amount ≥₹2,500, transaction SUCCESS status, requested within
 // 30 days of transaction date, account current (no overdue), total EMI exposure
 // after conversion ≤80% of credit limit, excluded categories: fuel, cash
@@ -451,7 +451,7 @@ async function checkEmiConversion(customerId: number, transactionId?: string, te
   });
 }
 
-// ── 6. Fraud liability timing ─────────────────────────────────────────
+// 6. Fraud liability timing policy gate
 // RBI limited-liability framework: the customer's liability for an unauthorized
 // transaction is set by how many WORKING DAYS pass between when they were
 // notified of the transaction and when they report it.
@@ -545,7 +545,7 @@ async function checkFraudLiability(
   });
 }
 
-// ── Tool wrappers ─────────────────────────────────────────────────────
+// Tool wrappers
 const checkLateFeeWaiverTool = defineTool({
   name: 'check_late_fee_waiver_eligibility',
   description:

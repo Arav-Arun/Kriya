@@ -1,14 +1,6 @@
-// Kriya e-mandate (recurring standing instruction) view. Each card subscription
-// maps to an e-mandate; this module projects the raw subscription row (the only
-// real state we hold: merchant, amount, billing cycle, next charge, cancellation)
-// into a mandate-shaped object.
-//
-// IMPORTANT — honesty rule: Kriya does NOT hold the registered regulatory terms
-// of these mandates (no registry feed, no AFA record, no SMS/notification
-// sender). So we MUST NOT fabricate registry facts. Anything we cannot source is
-// left null / 'unknown'. The only RBI material we surface is GENERAL policy
-// reference (the AFA-free recurring limits and the no-customer-fee rule), and it
-// is labelled as general policy, not this mandate's verified registered terms.
+// Kriya e-mandate mapping service.
+// Projects database subscriptions to RBI mandate objects.
+// Note: Kriya does not query a live mandate registry; unverified values are returned as null or 'unknown'.
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const parse = (v: unknown): Date | null => {
@@ -77,7 +69,6 @@ export function toEMandate(sub: Record<string, any>): EMandate {
   const cancelledOn = sub.cancelled_on ? iso(parse(sub.cancelled_on)!) : null;
 
   return {
-    // Internal app reference, not an official registry id.
     mandate_id: `KRIYA-EM-${id.replace(/^SUB-?/i, '')}`,
     subscription_id: id,
     merchant,
@@ -85,23 +76,16 @@ export function toEMandate(sub: Record<string, any>): EMandate {
     merchant_category: category,
     amount,
     billing_cycle: cycle,
-    // Kriya does not hold the registered debit cap — do not invent one.
     mandate_cap_inr: null,
-    // No AFA record is available to Kriya.
     afa_status: 'unknown',
     validity_period: {
-      // Real registration date when present; registered end date is unknown.
       start: start ? iso(start) : null,
       end: null,
       status: active ? 'active' : 'cancelled',
     },
-    // We know the next charge date/amount from the subscription; whether fresh
-    // AFA is required is a registry fact we don't hold → null.
     next_debit: active && nextOn
       ? { on: iso(nextOn), amount, afa_required: null }
       : null,
-    // Kriya has no SMS/notification sender, so we cannot assert a scheduled
-    // pre-debit notification. Leave the regulatory specifics unknown.
     pre_debit_notification: {
       required: null,
       notice_hours: null,
@@ -122,8 +106,8 @@ export function toEMandate(sub: Record<string, any>): EMandate {
 }
 
 export interface CancellationReceipt {
-  internal_reference: string;       // Kriya app-local reference, NOT a registry receipt id
-  internal_mandate_reference: string; // Kriya app-local reference, NOT a registry mandate id
+  internal_reference: string;
+  internal_mandate_reference: string;
   reference_note: string;
   subscription_id: string;
   merchant: string;
@@ -145,9 +129,6 @@ export function buildCancellationReceipt(
   nextChargeAvoided: string | null,
 ): CancellationReceipt {
   const today = iso(new Date());
-  // These are Kriya-internal references for the audit trail, not official
-  // registry receipt/mandate ids — labelled as such so they can't be mistaken
-  // for a regulator-issued confirmation number.
   const internalReference = `KRIYA-CANCEL-${mandate.subscription_id}-${today.replace(/-/g, '')}`;
   return {
     internal_reference: internalReference,

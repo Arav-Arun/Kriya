@@ -22,7 +22,7 @@ import { assertActionAllowed } from './verify.ts';
 
 const liveEnabled = () => config.providerMode === 'hyperface_uat' && hyperfaceProvider.configured;
 
-// ── Customer → live account binding
+// Customer to live account binding
 
 export interface LiveBinding {
   /** Provider customer id. Null for a demo_env binding when no test customer id
@@ -115,7 +115,7 @@ function isServableBinding(binding: LiveBinding | null | undefined, customerPhon
   return false;
 }
 
-// ── Centralized response copy ───────────────────────────────────────────
+// Centralized response copy
 // Named constants for the scattered fallback/disabled messages so wording is
 // consistent and reviewable in one place.
 
@@ -143,7 +143,7 @@ const MSG = {
     'Live account writes are disabled until the bank confirms a mutation-safe test program, so this was NOT executed on the card system of record — nothing changed on the customer\'s actual account. The request was only recorded in Kriya app state. Use the records-on-file action and tell the customer the live change has not yet been applied.',
 } as const;
 
-// ── Live-first reads for the CORE records tools ─────────────────────────
+// Live-first reads for core records tools
 // The provider API is the primary data source for any customer whose
 // registered mobile number matches a real provider account (phone_lookup).
 // The shared demo binding is deliberately excluded from ALL customer-facing
@@ -180,7 +180,7 @@ export async function linkedLiveSummary(customerId: number): Promise<import('../
   return r.live ? (r.data as import('../providers/types.ts').LiveAccountSummary) : null;
 }
 
-// ── Result shaping ───────────────────────────────────────────────────────
+// Result shaping
 
 function disabledJson(): string {
   return JSON.stringify({ live: false, code: 'DISABLED', message: MSG.DISABLED });
@@ -224,7 +224,7 @@ async function withBinding(
   return shape(await fn(binding!), binding);
 }
 
-// ── Read tools ───────────────────────────────────────────────────────────
+// Read tools
 
 export const getLiveBindingTool = defineTool({
   name: 'get_live_account_link',
@@ -363,7 +363,7 @@ export const inquireLiveTransactionTool = defineTool({
     })),
 });
 
-// ── Action tools (verification-gated, audited, idempotent) ──────────────
+// Action tools (verification-gated, audited, idempotent)
 
 type LiveCardActionType =
   | 'live_lock_card' | 'live_unlock_card' | 'live_hotlist_card'
@@ -530,7 +530,7 @@ export const liveSetCardControlsTool = defineTool({
   },
 });
 
-// ── Account-scoped writes (money movement + EMI) ────────────────────────
+// Account-scoped writes (money movement + EMI)
 
 async function gatedAccountAction(
   customerId: number,
@@ -647,7 +647,7 @@ export const liveForecloseEmiTool = defineTool({
 // removed. What remains has no records-on-file counterpart. All of these reads
 // require a phone-matched binding; a demo_env-only binding returns NO_BINDING.
 
-// ── Additional live read tools (full Hyperface surface coverage) ──────
+// Additional live read tools (full Hyperface surface coverage)
 
 export const getLiveBilledTransactionsTool = defineTool({
   name: 'get_live_billed_transactions',
@@ -803,7 +803,7 @@ export const getLiveCustomerDetailsTool = defineTool({
   },
 });
 
-// ── Live action tools for benefits ──────────────────────────────────────
+// Live action tools for benefits
 
 export const liveSubscribeBenefitTool = defineTool({
   name: 'live_subscribe_benefit',
@@ -835,7 +835,7 @@ export const liveUnsubscribeBenefitTool = defineTool({
       (b) => hyperfaceProvider.unsubscribeBenefit({ accountId: b.accountId, benefitId: String(benefit_id) })),
 });
 
-// ── Live action tools for rewards ───────────────────────────────────────
+// Live action tools for rewards
 
 export const liveCreditRewardsTool = defineTool({
   name: 'live_credit_rewards',
@@ -880,7 +880,7 @@ export const LIVE_READ_TOOLS = [
 export const LIVE_ACTION_TOOLS = [
   liveLockCardTool, liveUnlockCardTool, liveHotlistCardTool,
   liveReplaceCardTool, liveRefundTool, liveCreateEmiTool, liveForecloseEmiTool,
-  // ── New coverage ──
+  // New coverage
   liveSubscribeBenefitTool, liveUnsubscribeBenefitTool,
 ];
 

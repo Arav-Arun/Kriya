@@ -19,7 +19,7 @@ import { assertActionAllowed } from './verify.ts';
 import { tryLinkedRead, linkedLiveSummary } from './provider-tools.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 
-// ── Policy & pricing constants ────────────────────────────────────────
+// Policy & pricing constants
 // Single source of truth for every magic literal that is enforced in code
 // AND quoted in a tool description, so the number can't drift between the two.
 // EMI pricing
@@ -91,7 +91,7 @@ async function findCustomerTransaction(customerId: number, transactionId: string
   return (data ?? null) as Record<string, any> | null;
 }
 
-// ── Read-only tools ───────────────────────────────────────────────────
+// Read-only tools
 
 export const getCustomerProfileTool = defineTool({
   name: 'get_customer_profile',
@@ -407,7 +407,7 @@ export const getDisputesTool = defineTool({
 });
 
 
-// ── Action tools ──────────────────────────────────────────────────────
+// Action tools
 
 export const raiseDisputeTool = defineTool({
   name: 'raise_dispute',
