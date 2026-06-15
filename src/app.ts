@@ -418,7 +418,7 @@ app.post('/api/channels/telegram/webhook', async (c) => {
       .catch((err) => console.error('[telegram] persist contact failed:', err));
     void telegramAdapter.sendText(
       parsed.phone,
-      "Thanks — you're connected. Ask me anything about your card: balance, transactions, EMIs, rewards, or blocking your card if it's lost.",
+      "Thanks — you're connected. Ask me anything about your card: balance, transactions, EMIs, or blocking your card if it's lost.",
     ).catch((err) => console.error('[telegram] welcome failed:', err));
     return c.json({ ok: true });
   }

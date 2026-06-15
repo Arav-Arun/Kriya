@@ -4,9 +4,9 @@ import {
   getFeesAndCharges, getUnwaivedFees, getRecentWaivers, waiveFee,
   updateCustomerContext, createCustomerTransaction,
   getActiveEmis, foreclosEmi, createEmi,
-  updateCardStatus, toggleInternational, adjustCreditLimit, redeemRewards,
+  updateCardStatus, adjustCreditLimit,
   initiateRefund, createEscalation, logAction,
-  setCardControl, setAutopay,
+  setAutopay, toggleInternational, setCardControl,
   getDisputes, createDispute, getSubscriptions, cancelSubscription,
 } from '../database/queries.ts';
 import { supabase } from '../database/client.ts';
@@ -22,9 +22,6 @@ import { hyperfaceProvider } from '../providers/hyperface.ts';
 // ── Policy & pricing constants ────────────────────────────────────────
 // Single source of truth for every magic literal that is enforced in code
 // AND quoted in a tool description, so the number can't drift between the two.
-// Rewards
-const REWARD_POINT_VALUE_INR = 0.25;        // 1 reward point = INR 0.25 statement credit
-const MIN_REDEMPTION_POINTS = 500;          // minimum points per redemption
 // EMI pricing
 const EMI_ALLOWED_TENURES = [3, 6, 9, 12, 18, 24] as const;
 const EMI_RATE_SHORT_PCT = 14;              // annual rate for tenure <= 6 months
@@ -221,22 +218,6 @@ export const getOutstandingBalanceTool = defineTool({
       });
     }
     return liveUnavailable('balance and limits');
-  },
-});
-
-export const getRewardPointsTool = defineTool({
-  name: 'get_reward_points',
-  description: `Get the customer's current reward points balance. Points can be redeemed as statement credit at 1 point = INR ${REWARD_POINT_VALUE_INR}. When no points balance is on file, the balance is reported as "unavailable" (not zero).`,
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) => {
-    const cid = Number(customer_id);
-    const c = await getCustomer(cid);
-    if (!c) return JSON.stringify({ error: 'Customer not found' });
-    const live = await tryLinkedRead(cid, (b) => hyperfaceProvider.rewardsSummary(b.accountId));
-    if (live.live) {
-      return JSON.stringify({ source: 'live_provider', rewards: live.data });
-    }
-    return liveUnavailable('reward points', live.note);
   },
 });
 
@@ -636,28 +617,6 @@ export const forecloseEmiTool = defineTool({
     const ok = await foreclosEmi(String(emi_id));
     if (ok) await logAction({ customer_id: cid, action_type: 'emi_foreclosed', action_detail: { emi_id, remaining_principal: remainingPrincipal, foreclosure_charge: foreclosureCharge }, policy_reference: 'POL-004' });
     return JSON.stringify({ success: ok, emi_id, remaining_principal: remainingPrincipal, foreclosure_charge: foreclosureCharge, total_payable: remainingPrincipal + foreclosureCharge });
-  },
-});
-
-export const redeemRewardsTool = defineTool({
-  name: 'redeem_rewards',
-  description: `Redeem reward points as statement credit. 1 point = INR ${REWARD_POINT_VALUE_INR}. Minimum redemption: ${MIN_REDEMPTION_POINTS} points.`,
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    points: Type.Number({ description: 'Number of points to redeem' }),
-  }),
-  execute: async ({ customer_id, points }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'redeem_rewards');
-    if (verificationBlock) return verificationBlock;
-
-    const pts = Number(points);
-    if (pts < MIN_REDEMPTION_POINTS) return JSON.stringify({ success: false, reason: `Minimum redemption is ${MIN_REDEMPTION_POINTS} points` });
-    const ok = await redeemRewards(cid, pts);
-    if (!ok) return JSON.stringify({ success: false, reason: 'Insufficient points balance' });
-    const value = Math.round(pts * REWARD_POINT_VALUE_INR);
-    await logAction({ customer_id: cid, action_type: 'rewards_redeemed', action_detail: { points: pts, value_inr: value } });
-    return JSON.stringify({ success: true, points_redeemed: pts, credit_amount_inr: value });
   },
 });
 

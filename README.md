@@ -77,7 +77,7 @@ The agent only acts on `eligible: true`; otherwise it explains the reason codes 
 
 ## Automated vs. escalated
 
-- **Automated** when policy, account data, and authority allow it: waive a fee, refund a confirmed duplicate, block/unblock a card, set card controls, cancel an e-mandate, convert to EMI, redeem points, raise a dispute, increase a limit when eligible.
+- **Automated** when policy, account data, and authority allow it: waive a fee, refund a confirmed duplicate, block/unblock a card, cancel an e-mandate, convert to EMI, raise a dispute, increase a limit when eligible.
 - **Confirm first** for irreversible actions: card closure, permanent hotlisting.
 - **Escalated** when the AI genuinely cannot finish: fraud investigations, chargebacks, KYC. The card is blocked first if fraud is suspected, an escalation is created with the investigation already attached, and the customer is given a reference (e.g. `ESC-1002`) and a status.
 
@@ -95,43 +95,38 @@ The agent only acts on `eligible: true`; otherwise it explains the reason codes 
 ## Product Surfaces
 
 1. **Copilot Chat**: Describe an issue by text or image; it gets resolved in the conversation. Live pipeline visibility shows each stage (Triage → Investigation ∥ Policy ∥ Precedent → Resolution) as it executes.
-2. **Account Page**: A minimal, table-first, factual dashboard showing live database data:
-   - **Bill & Limit Summary**: Total Limit, Available Limit, Outstanding Total, and Utilization progress bar.
-   - **Outstanding Details**: Outstanding Billed, Minimum Due, Due Date with countdown, CIBIL score, and KYC status.
-   - **Card Controls**: Interactive toggles for Online, POS, Contactless, ATM, and International usage, and Autopay settings. All toggles write real changes to Supabase and trigger audit logs.
-   - **Rewards Summary**: Accumulated points balance and its cash value as statement credit (₹0.25 per point).
-   - **Recent Transactions & Fees**: Real-time list of settled transactions and charges with waivers flagged.
-   - **Active Autopays**: RBI e-mandate list with inline cancellation buttons.
-3. **Resolution Records**: Displays active disputes/chargebacks alongside a comprehensive **Audit Trail & Resolution Logs** (from `actions_log` database) showing all automated actions, waiver history, and card control adjustments.
-4. **Escalation Tickets**: Dedicated view for escalated issues that required specialist review. Shows ticket reference, priority, assigned team, status (Open/Resolved), and resolution notes. Customers can ask the copilot about ticket status directly from this view.
-5. **Case History**: Sidebar history of past conversations with rename/delete support. The Resolution agent's session persists across conversations, so it remembers prior context.
+2. **Identity Verification & Security**: High-risk actions automatically prompt the cardholder for their card's last 4 digits in-chat to verify identity before proceeding.
+3. **Audit Trail**: Every action performed is logged as a structured record and streamed as an action card directly inside the chat UI.
+4. **Sarvam Voice Integration**: Tap the microphone icon to chat in English, Hindi, or Hinglish with speech-to-text and text-to-speech feedback.
+5. **Case History**: Sidebar history of past conversations with rename/delete support.
 6. **Optional evidence upload**: Allows statements/receipts (PDF, image, CSV, TXT) to be uploaded and analyzed via OpenAI Vision/Completions and stored as context for the copilot.
 
 ---
 
-## Demo Steps (Rohan Mehta)
+## Demo Steps (UAT Test Customers)
 
 To run a demo for fintech leadership:
 
-1. **Login**: Open `http://localhost:3583/` and click on **Rohan Mehta** to sign in.
-2. **Explore Account Tab**: Click **Account** in the header. Note Rohan's active limits, his Netflix e-mandate of ₹649/mo, and active card control switches.
-3. **Toggle Card Controls**: Turn off **International Transactions** or **Online Transactions** using the switches. Notice the sidebar snapshot updates immediately. Click the **Resolution Records** tab to see the change audited in the "Audit Trail" list.
-4. **Late-Fee Goodwill Waiver**:
-   - Switch to **Chat** and type: `"I paid 1 day late, please waive the fee."`
-   - Observe the live stages: Triage → Investigation ∥ Policy Check ∥ Precedent Review → Resolution.
-   - Sentinel evaluates Rohan's record (CIBIL 807, 100% on-time payments, no waiver in the last 12 months) and waives the fee.
-   - Check the **Account** page: outstanding balance has decreased, available limit increased, and the late fee is marked as "Waived".
-5. **Cancel Netflix Autopay**:
-   - In chat, type: `"Show my active autopays, then cancel Netflix."`
-   - Sentinel runs the e-mandate cancellation check, revokes future debits with zero customer fee, and prints the e-mandate cancellation receipt.
-   - Check the **Account** tab: the Netflix e-mandate is marked as Cancelled.
-6. **CIBIL-Gated Credit Limit Increase**:
-   - In chat, type: `"Increase my card limit."`
-   - Sentinel evaluates Rohan's CIBIL score (807), card vintage, utilization band, and zero missed payments, then adjusts the credit limit to 150% of current and logs the enhancement.
-7. **Fraud Reporting & Handoff**:
-   - In chat, type: `"I see an unauthorized charge of ₹5,000 on June 10."`
-   - Sentinel immediately blocks the card, computes the RBI limited-liability band (zero liability since reported within 3 working days), and escalates to **Fraud Operations** generating a ticket reference.
-   - Check the **Escalation Tickets** tab to see the ticket with priority and assigned team.
+1. **Login**: Open `http://localhost:3583/` and enter one of the registered test numbers:
+   - **8398480550** (Jaden Peyton): Outstanding balance of ₹1,457.04, available credit of ₹18,542.96.
+   - **8605763345** (Henry Olivia): Outstanding balance of ₹0.
+2. **Live Balance Check**:
+   - Ask: `"What's my outstanding balance?"`
+   - Kriya pulls the real-time balance directly from Hyperface.
+3. **Strict-Live Honesty (Pending Feeds)**:
+   - Ask: `"Show my recent transactions"`
+   - Kriya returns an honest "not available — bank feed not enabled yet" statement, proving we never fabricate data where feeds are pending.
+4. **CIBIL-Gated credit limit policy and verification**:
+   - Ask: `"I want to increase my credit limit"`
+   - Kriya asks for the card's last 4 digits to verify identity. Enter **3350** for Jaden (or **8100** for Henry).
+   - Once verified, Kriya runs the credit limit policy gate check (Vintage, CIBIL >= 730, payment record) to determine eligibility.
+5. **Autopay mandate cancellation**:
+   - Ask: `"Cancel my Netflix subscription mandate"`
+   - Sentinel evaluates eligibility, revokes the autopay mandate in Kriya state, and generates the cancellation receipt.
+6. **Voice Mode**:
+   - Tap the microphone icon and speak: `"What is my credit limit?"`
+   - Kriya transcribes, processes the query, and speaks the live limit back to you.
+
 
 ---
 

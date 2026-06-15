@@ -869,22 +869,19 @@ export const liveDebitRewardsTool = defineTool({
 
 export const LIVE_READ_TOOLS = [
   getLiveBindingTool, getLiveAccountOverviewTool, getLiveAccountDetailsTool,
-  getLiveUnbilledTool, getLiveCardDetailsTool, getLiveCardControlsTool,
-  getLiveRewardsLedgerTool, getLiveCashbackTool,
+  getLiveUnbilledTool, getLiveCardDetailsTool, getLiveCashbackTool,
   getLiveEmiOfferTool, inquireLiveTransactionTool,
   getLiveBilledTransactionsTool, getLiveDownloadStatementTool,
   getLiveBenefitsTool, getLiveBenefitsByProgramTool,
-  getLiveExpiringRewardsTool, getLiveRewardTransactionsTool, getLiveRewardAccountTool,
   getLiveEmiListTool, getLiveForeclosureDetailsTool,
   getLivePaymentStatusTool, getLiveCustomerDetailsTool,
 ];
 
 export const LIVE_ACTION_TOOLS = [
   liveLockCardTool, liveUnlockCardTool, liveHotlistCardTool,
-  liveReplaceCardTool, liveSetCardControlsTool,
-  liveRefundTool, liveCreateEmiTool, liveForecloseEmiTool,
+  liveReplaceCardTool, liveRefundTool, liveCreateEmiTool, liveForecloseEmiTool,
   // ── New coverage ──
   liveSubscribeBenefitTool, liveUnsubscribeBenefitTool,
-  liveCreditRewardsTool, liveDebitRewardsTool,
 ];
+
 

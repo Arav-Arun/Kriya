@@ -62,8 +62,6 @@
           <li><strong>Unlock Card</strong>: remove the temporary lock</li>
           <li><strong>Hotlist Card</strong>: permanently disable a lost or stolen card (irreversible)</li>
           <li><strong>Replace Card</strong>: order a replacement card (damaged/lost)</li>
-          <li><strong>View Card Controls</strong>: see which channels (online, POS, contactless, ATM, international) are enabled</li>
-          <li><strong>Set Card Controls</strong>: toggle channels and adjust per-channel limits</li>
         </ul>
       </article>
 
@@ -73,7 +71,7 @@
           <h3>Transactions & Statements</h3>
         </div>
         <ul class="api-list">
-          <li><strong>Fetch Transactions</strong>: list recent transactions with merchant, amount, status</li>
+          <li><strong>Fetch Transactions</strong>: list recent transactions (honest live pending notification)</li>
           <li><strong>Billed Transactions</strong>: charges that appear on the last statement</li>
           <li><strong>Unbilled Transactions</strong>: charges in the current cycle not yet billed</li>
           <li><strong>Transaction Inquiry</strong>: look up a single transaction by id or reference</li>
@@ -98,46 +96,6 @@
 
       <article class="api-group">
         <div class="api-group-head">
-          <span class="api-dot" style="background: var(--green-2)"></span>
-          <h3>Rewards & Points</h3>
-        </div>
-        <ul class="api-list">
-          <li><strong>Rewards Summary</strong>: current points balance and value</li>
-          <li><strong>Rewards Ledger</strong>: per-entry earn/redeem/expire log</li>
-          <li><strong>Reward Account</strong>: earning rates, tier, multiplier configuration</li>
-          <li><strong>Reward Transactions</strong>: full earn/burn history with date ranges</li>
-          <li><strong>Expiring Rewards</strong>: points about to expire, with dates</li>
-          <li><strong>Credit Reward Points</strong>: add points (goodwill, promo)</li>
-          <li><strong>Debit Reward Points</strong>: redeem points as statement credit or voucher</li>
-        </ul>
-      </article>
-
-      <article class="api-group">
-        <div class="api-group-head">
-          <span class="api-dot" style="background: #2d9cdb"></span>
-          <h3>Cashback</h3>
-        </div>
-        <ul class="api-list">
-          <li><strong>Cashback Summary</strong>: total cashback earned in a date range</li>
-          <li><strong>Cashback Transactions</strong>: per-transaction cashback earned/pending/credited</li>
-        </ul>
-      </article>
-
-      <article class="api-group">
-        <div class="api-group-head">
-          <span class="api-dot" style="background: #e67e22"></span>
-          <h3>Benefits & Perks</h3>
-        </div>
-        <ul class="api-list">
-          <li><strong>Fetch Benefits</strong>: benefits available to this customer/account</li>
-          <li><strong>Fetch Benefits by Program</strong>: all benefits on the card program</li>
-          <li><strong>Subscribe to Benefit</strong>: opt in to a benefit (lounge access, insurance, partner offer)</li>
-          <li><strong>Unsubscribe from Benefit</strong>: opt out of a subscribed benefit</li>
-        </ul>
-      </article>
-
-      <article class="api-group">
-        <div class="api-group-head">
           <span class="api-dot" style="background: var(--ink)"></span>
           <h3>Disputes, Fees & Escalations</h3>
         </div>
@@ -145,7 +103,7 @@
           <li><strong>Raise Dispute/Chargeback</strong>: file a formal dispute on a settled transaction, tracked per RBI timelines</li>
           <li><strong>Track Dispute</strong>: check the status, provisional credit, and resolution timeline</li>
           <li><strong>Initiate Refund</strong>: credit back an eligible transaction immediately</li>
-          <li><strong>Waive Fee</strong>: auto-waive a late/annual fee (max 1 per year, max ₹1,000, policy-gated)</li>
+          <li><strong>Waive Fee</strong>: auto-waive a late/annual fee (max 1 per year, max ₹1,00,000, policy-gated)</li>
           <li><strong>Create Escalation</strong>: escalate to a human operations team with full AI investigation summary</li>
           <li><strong>Check Payment Status</strong>: verify whether a repayment was received and credited</li>
           <li><strong>Fraud Liability Assessment</strong>: RBI-compliant limited-liability check within 3 working days</li>
@@ -200,7 +158,7 @@
         <ol class="steps">
           <li>Open the web chat page and enter your registered mobile number.</li>
           <li>Kriya pulls up your live account from the secure card system.</li>
-          <li>Ask about bills, check transactions, adjust limits, or manage rewards in real-time.</li>
+          <li>Ask about bills, check transactions, adjust limits, or block your card in real-time.</li>
         </ol>
         <div class="card-cta">
           <a href="/chat" class="btn">

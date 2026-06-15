@@ -2,14 +2,14 @@ import { createAgent } from '@flue/runtime';
 import { RESOLUTION_PROMPT } from '../services/prompts.ts';
 import {
   getCustomerProfileTool, getTransactionsTool, getPaymentHistoryTool,
-  getOutstandingBalanceTool, getRewardPointsTool, getActiveEmisTool,
+  getOutstandingBalanceTool, getActiveEmisTool,
   getFeesAndChargesTool, recordCustomerContextTool, recordCustomerTransactionTool,
   getStatementsTool, getDisputesTool, getSubscriptionsTool,
   getEmandatesTool, cancelEmandateTool,
   waiveFeeTool, blockCardTool, unblockCardTool, hotlistCardTool,
   toggleInternationalTool, setCardControlTool, setAutopayTool,
   convertToEmiTool, forecloseEmiTool, raiseDisputeTool,
-  redeemRewardsTool, initiateRefundTool, adjustCreditLimitTool,
+  initiateRefundTool, adjustCreditLimitTool,
   initiateCardClosureTool, createEscalationTool, cancelSubscriptionTool,
   setConversationStateTool,
 } from '../services/tools.ts';
@@ -26,7 +26,7 @@ export default createAgent(() => ({
   sandbox: false,
   tools: [
     getCustomerProfileTool, getTransactionsTool, getPaymentHistoryTool,
-    getOutstandingBalanceTool, getRewardPointsTool, getActiveEmisTool,
+    getOutstandingBalanceTool, getActiveEmisTool,
     getFeesAndChargesTool, recordCustomerContextTool, recordCustomerTransactionTool,
     getStatementsTool, getDisputesTool, getSubscriptionsTool,
     getEmandatesTool, cancelEmandateTool,
@@ -35,9 +35,10 @@ export default createAgent(() => ({
     waiveFeeTool, blockCardTool, unblockCardTool, hotlistCardTool,
     toggleInternationalTool, setCardControlTool, setAutopayTool,
     convertToEmiTool, forecloseEmiTool, raiseDisputeTool,
-    redeemRewardsTool, initiateRefundTool, adjustCreditLimitTool,
+    initiateRefundTool, adjustCreditLimitTool,
     initiateCardClosureTool, createEscalationTool, cancelSubscriptionTool,
     setConversationStateTool,
   ],
   instructions: RESOLUTION_PROMPT,
 }));
+
