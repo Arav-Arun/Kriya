@@ -79,6 +79,20 @@ export type TelegramInbound =
   | { kind: 'contact'; chatId: string; phone: string; profileName?: string }
   | null;
 
+/** Pull a clean 10-digit Indian mobile number out of free text — "8668670352",
+ *  "+91 8668670352", or "check this number: +91 8668670352" all yield
+ *  "8668670352". Used only for the UAT typed-identity affordance below. Returns
+ *  null when the text has no phone-shaped token, so a normal question ("what's my
+ *  balance") is never mistaken for a number. */
+function extractIndianMobile(text: string): string | null {
+  for (const raw of text.match(/\+?\d[\d\s-]{8,}\d/g) ?? []) {
+    const digits = raw.replace(/\D/g, '');
+    const core = digits.length > 10 && /^(0|91)/.test(digits) ? digits.slice(-10) : digits;
+    if (core.length === 10 && /^[6-9]/.test(core)) return core;
+  }
+  return null;
+}
+
 /** Normalize a Telegram Update into a contact share or a text message,
  *  resolving identity from the learned phone <-> chat_id map. */
 export function parseTelegramUpdate(body: any): TelegramInbound {
@@ -116,6 +130,27 @@ export function parseTelegramUpdate(body: any): TelegramInbound {
   const text = String(m.text ?? '').trim();
   if (!text) return null;
   const phone = phoneByChatId.get(chatId);
+
+  // UAT TEST AFFORDANCE: a chat may identify (or switch accounts) by TYPING a
+  // registered mobile number — e.g. a Hyperface UAT directory number — instead of
+  // tapping "Share my number". A typed number is NOT vouched for by Telegram, so
+  // this is gated to the UAT provider mode: in production the contact share is the
+  // only identity path, because it proves the sender owns the number (otherwise
+  // anyone could type a cardholder's number and read their account, as reads are
+  // ungated). Treated exactly like a contact share: bind + welcome, then the next
+  // message is identified and runs the normal pipeline.
+  //   - Not yet linked: accept a number even inside a sentence ("check this: …").
+  //   - Already linked: only re-link when the message is JUST a number (no
+  //     letters), so a normal question that happens to contain digits never
+  //     silently switches the account.
+  if (config.providerMode === 'hyperface_uat' && (!phone || !/[a-z]/i.test(text))) {
+    const typed = extractIndianMobile(text);
+    if (typed && typed !== phone) {
+      bindContact(typed, chatId);
+      return { kind: 'contact', chatId, phone: typed, profileName };
+    }
+  }
+
   return {
     kind: 'text',
     chatId,
@@ -171,9 +206,15 @@ export async function requestContact(chatId: string): Promise<OutboundDelivery> 
   if (last && Date.now() - last < PROMPT_THROTTLE_MS) return { ok: true };
   if (lastPromptByChatId.size > MAX_BINDINGS) lastPromptByChatId.clear();
   lastPromptByChatId.set(chatId, Date.now());
+  // In UAT, invite typing the number too (the typed-identity path in
+  // parseTelegramUpdate) so a tester can use a Hyperface directory number
+  // without sharing their real Telegram contact.
+  const text = config.providerMode === 'hyperface_uat'
+    ? "Namaste! I'm Kriya, your card assistant. To pull up your account, reply with your registered 10-digit mobile number — or tap the button below to share it."
+    : "Namaste! I'm Kriya, your card assistant. To pull up your account, please share your registered mobile number using the button below.";
   const r = await callTelegram('sendMessage', {
     chat_id: chatId,
-    text: "Namaste! I'm Kriya, your card assistant. To pull up your account, please share your registered mobile number using the button below.",
+    text,
     reply_markup: {
       keyboard: [[{ text: '📱 Share my number', request_contact: true }]],
       resize_keyboard: true,

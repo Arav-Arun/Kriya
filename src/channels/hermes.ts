@@ -6,7 +6,7 @@
 // so webhook retries never run the pipeline twice.
 import { supabase } from '../database/client.ts';
 import { config } from '../config/env.ts';
-import { createCustomerFromLive } from '../database/queries.ts';
+import { createCustomerFromLive, ProvisioningError } from '../database/queries.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 import { invalidateLiveBinding } from '../services/provider-tools.ts';
 import { phoneKey } from './types.ts';
@@ -218,6 +218,13 @@ const UNMATCHED_REPLY =
   'Namaste! This is Kriya, your card assistant. I could not match this number to a card account. '
   + 'Please message from your registered mobile number, or contact your bank to update your contact details.';
 
+// Distinct from UNMATCHED_REPLY: the card account WAS found, but provisioning the
+// local profile failed (e.g. a pending DB migration). Never tell a real customer
+// their number isn't registered when the account actually exists.
+const SETUP_FAILED_REPLY =
+  'Namaste! I found your card account but could not finish setting up your profile just now. '
+  + 'This is a temporary issue on our side — please try again in a few minutes.';
+
 export interface HermesOutcome {
   matched: boolean;
   deduped?: boolean;
@@ -244,7 +251,22 @@ export async function handleInbound(
 
   // Records on file first (cheap), then the provider API: an unknown number
   // with a live card account gets provisioned on the spot.
-  const customer = await customerByPhone(msg.from) ?? await provisionFromLive(msg.from);
+  let customer: MatchedCustomer | null;
+  try {
+    customer = await customerByPhone(msg.from) ?? await provisionFromLive(msg.from);
+  } catch (err) {
+    if (!(err instanceof ProvisioningError)) throw err;
+    // Account exists but local setup failed — surface a setup error, not "unmatched".
+    console.error(`[hermes] provisioning failed for ${msg.channel} ${phoneKey(msg.from).slice(-4)}:`, err.message);
+    await recordMessage({
+      channel: msg.channel, direction: 'inbound', peer: msg.from,
+      customerId: null, conversationId: null,
+      providerMessageId: msg.providerMessageId, body: msg.text,
+      meta: { profile_name: msg.profileName, matched: false, provisioning_error: err.message },
+    });
+    const delivery = adapter ? await adapter.sendText(msg.from, SETUP_FAILED_REPLY) : undefined;
+    return { matched: false, reply: SETUP_FAILED_REPLY, delivery };
+  }
 
   if (!customer) {
     await recordMessage({

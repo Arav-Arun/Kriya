@@ -2,11 +2,14 @@
 // the cardholder, or someone random?
 //
 // Factor model (deterministic, auditable):
-//   1. POSSESSION — the message arrived on a trusted channel bound to the
-//      registered mobile number (the Telegram webhook is verified). The web copilot's
-//      sessionStorage picker is UNTRUSTED, so it never grants possession.
+//   1. POSSESSION — the customer is in a live Kriya session: the web copilot
+//      (signed in with their registered mobile number) or a trusted messaging
+//      channel bound to that number (e.g. the verified Telegram webhook). Every
+//      supported entry path grants possession, so it is effectively session-level
+//      and is NEVER the factor a customer has to "go elsewhere" to satisfy.
 //   2. KNOWLEDGE — the customer states their card's last 4 digits in chat and
-//      it matches the account record. Valid 30 minutes.
+//      it matches the account record. Valid 30 minutes. This is the only factor
+//      the customer actively supplies, and they can always do it right here.
 //
 // Sensitive (high-risk) actions need BOTH factors. Low-risk/protective actions
 // (block/lock card, reads) need none beyond the session. Every factor event
@@ -120,9 +123,13 @@ export async function assertActionAllowed(customerId: number, actionType: string
     return { allowed: true, level, reason: `Two-factor verification satisfied (${level}).` };
   }
 
-  // Knowledge (card last-4) is the factor the customer can supply in chat;
-  // possession can only come from a verified messaging channel (not the web).
-  const needed = !v.knowledge ? 'knowledge' : 'possession';
+  // Possession is granted by every supported entry path — the web copilot and
+  // trusted messaging channels alike (see verificationStatus). So the only factor
+  // a customer ever has to actively supply for a sensitive action is the card
+  // last-4 (knowledge), and they can always do that right here in chat. There is
+  // deliberately NO "do this from another channel" outcome: the customer is
+  // already on a valid one, so we never dead-end them off to Telegram.
+  const needed = 'knowledge' as const;
   await logAction({
     customer_id: customerId,
     action_type: 'verification_required',
@@ -131,9 +138,7 @@ export async function assertActionAllowed(customerId: number, actionType: string
   return {
     allowed: false,
     level,
-    reason: needed === 'knowledge'
-      ? `"${actionType}" is a sensitive action and needs identity verification — ask the customer for the last 4 digits of their card (current: ${level}).`
-      : `"${actionType}" is a sensitive action and additionally needs a verified channel: the customer must be on their registered Telegram, not the web (current: ${level}).`,
+    reason: `"${actionType}" is a sensitive action — ask the customer to type the last 4 digits of their card to confirm it's them, then retry (current factors: ${level}).`,
     needed,
   };
 }

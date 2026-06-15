@@ -44,7 +44,7 @@ export async function run(ctx: FlueContext<Payload>) {
   });
   const channelNote = channel?.trusted
     ? `Channel: ${channel.kind} (trusted — message from the registered mobile number; possession factor satisfied)`
-    : `Channel: ${channel?.kind ?? 'web'} (untrusted session — no possession factor; sensitive actions need the card last-4, and channel-gated ones must be done from the registered Telegram)`;
+    : `Channel: ${channel?.kind ?? 'web'} (web copilot session — possession factor satisfied; ACCOUNT READS (balance, limits, statements, transactions, card status) NEED NO VERIFICATION; only a sensitive action needs the card last-4)`;
 
   // Deterministic identity-factor handling, BEFORE the agent runs. If the
   // customer replied with a code, the workflow verifies it itself — security

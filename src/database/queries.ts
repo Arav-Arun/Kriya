@@ -94,10 +94,25 @@ export async function getCustomer(id: number): Promise<Customer | undefined> {
 }
 
 /**
+ * Raised when a customer WAS found in the live card provider but the local
+ * provisioning insert failed (e.g. a schema/NOT NULL constraint, a pending
+ * migration). This is deliberately distinct from "no account on this number":
+ * the live account exists, so callers must surface a setup error and never the
+ * misleading "we couldn't find a card account".
+ */
+export class ProvisioningError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProvisioningError';
+  }
+}
+
+/**
  * Provision a customer row from the live card provider (identity sourced from
  * the API; the row is the chat/audit anchor, not the data source). Returns the
- * new id, or null when the insert fails (e.g. schema constraint) — callers
- * treat that as "no match" rather than erroring the inbound message.
+ * new id. Throws {@link ProvisioningError} when the insert fails (e.g. schema
+ * constraint / pending migration) — the live account exists, so callers must
+ * NOT treat this as "no match".
  */
 export async function createCustomerFromLive(input: {
   name: string;
@@ -108,14 +123,14 @@ export async function createCustomerFromLive(input: {
   credit_limit?: number;
   available_limit?: number;
   outstanding_total?: number;
-}): Promise<number | null> {
+}): Promise<number> {
   // The seeded table has no id sequence — ids were inserted explicitly — so
   // allocate the next one ourselves (single-writer demo scale).
   const { data: maxRow, error: maxErr } = await supabase.from('customers')
     .select('id').order('id', { ascending: false }).limit(1).maybeSingle();
   if (maxErr) {
-    console.error('[queries] createCustomerFromLive failed:', maxErr.message);
-    return null;
+    console.error('[queries] createCustomerFromLive failed (id allocation):', maxErr.message);
+    throw new ProvisioningError(`could not allocate customer id: ${maxErr.message}`);
   }
   const nextId = Number(maxRow?.id ?? 0) + 1;
   // The Hyperface API only sources the eight live fields below (identity +
@@ -164,8 +179,8 @@ export async function createCustomerFromLive(input: {
     autopay_mode: 'total_due',
   }).select('id').single();
   if (error) {
-    console.error('[queries] createCustomerFromLive failed:', error.message);
-    return null;
+    console.error('[queries] createCustomerFromLive failed (insert):', error.message);
+    throw new ProvisioningError(`insert failed: ${error.message}`);
   }
   return Number((data as { id: number }).id);
 }

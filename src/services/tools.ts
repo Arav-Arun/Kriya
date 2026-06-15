@@ -1,12 +1,12 @@
 import { defineTool, Type } from '@flue/runtime';
 import {
-  getCustomer, getTransactions, getPaymentHistory, getPaymentSummary,
+  getCustomer, getPaymentHistory, getPaymentSummary,
   getFeesAndCharges, getUnwaivedFees, getRecentWaivers, waiveFee,
   updateCustomerContext, createCustomerTransaction,
   getActiveEmis, foreclosEmi, createEmi,
   updateCardStatus, toggleInternational, adjustCreditLimit, redeemRewards,
   initiateRefund, createEscalation, logAction,
-  getStatements, setCardControl, setAutopay,
+  setCardControl, setAutopay,
   getDisputes, createDispute, getSubscriptions, cancelSubscription,
 } from '../database/queries.ts';
 import { supabase } from '../database/client.ts';
@@ -46,6 +46,24 @@ const DISPUTE_RESOLUTION_SLA = '30-45 days';
 // Label for any figure read from DB rows that are app/seed state with no live
 // feed behind them — must never be presented as the customer's real account data.
 const SOURCE_RECORDS_ON_FILE = 'records_on_file';
+
+/**
+ * Strict-live policy (Arav, 2026-06-15): customer account DATA comes ONLY from
+ * the Hyperface system of record. When a live read is unavailable — no
+ * phone-linked account, the provider feed isn't entitled/enabled (403), or the
+ * provider is down — return an explicit "unavailable" and NEVER fall back to a
+ * records-on-file snapshot dressed up as the customer's real data. `note`
+ * carries the live reason (PERMISSION_PENDING / provider message) when known.
+ */
+function liveUnavailable(feed: string, note?: string): string {
+  return JSON.stringify({
+    source: 'live_unavailable',
+    available: false,
+    feed,
+    reason: note ?? "No live card account is linked to this customer's registered mobile number.",
+    note: `Live ${feed} could not be retrieved from the card system of record. Tell the customer this isn't available from the live system right now — do NOT invent, estimate, or read it from any other source.`,
+  });
+}
 
 /**
  * Deterministic identity gate for sensitive actions. Returns null when the
@@ -105,10 +123,15 @@ export const getCustomerProfileTool = defineTool({
           source_note: 'balance/limits/card status are live from the card system of record; due date, CIBIL, risk, reward points and KYC have no live source and are shown only when on file (else "unavailable")',
         }
       : {
-          source: SOURCE_RECORDS_ON_FILE,
-          card_status: c.card_status,
-          credit_limit: c.credit_limit, available_limit: c.available_limit,
-          outstanding_total: c.outstanding_total,
+          // Strict-live: no phone-linked account → account FIGURES are
+          // unavailable, never the records-on-file snapshot. Identity (name/email
+          // below) is the chat anchor and stays; figures must be live or nothing.
+          source: 'live_unavailable',
+          card_status: 'unavailable',
+          credit_limit: 'unavailable',
+          available_limit: 'unavailable',
+          outstanding_total: 'unavailable',
+          figures_note: 'No live card account is linked to this customer, so balance/limits/card status are unavailable — do not state any figure.',
         };
     // Fields with no live source: present the genuine on-file value when present,
     // otherwise "unavailable" — never emit a 0/placeholder under a live response.
@@ -151,16 +174,7 @@ export const getTransactionsTool = defineTool({
     if (live.live) {
       return JSON.stringify({ source: 'live_provider', transactions: live.data });
     }
-    const rows = await getTransactions(cid, {
-      merchant: merchant ? String(merchant) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
-    return JSON.stringify({
-      source: 'records_on_file',
-      ...(live.note ? { live_status: live.note } : {}),
-      count: rows.length,
-      transactions: rows,
-    });
+    return liveUnavailable('transactions', live.note);
   },
 });
 
@@ -206,15 +220,7 @@ export const getOutstandingBalanceTool = defineTool({
         source_note: 'balance/limits are live from the card system of record; minimum due and due date are records on file (shown only when available)',
       });
     }
-    return JSON.stringify({
-      source: SOURCE_RECORDS_ON_FILE,
-      outstanding_total: c.outstanding_total,
-      outstanding_billed: c.outstanding_billed,
-      ...(c.minimum_due != null ? { minimum_due: c.minimum_due } : { minimum_due: 'unavailable' }),
-      ...(c.due_date != null ? { due_date: c.due_date } : { due_date: 'unavailable' }),
-      credit_limit: c.credit_limit,
-      available_limit: c.available_limit,
-    });
+    return liveUnavailable('balance and limits');
   },
 });
 
@@ -230,22 +236,7 @@ export const getRewardPointsTool = defineTool({
     if (live.live) {
       return JSON.stringify({ source: 'live_provider', rewards: live.data });
     }
-    // No reward points feed on file → report unavailable, never "0 points (INR 0)".
-    if (c.reward_points_balance == null) {
-      return JSON.stringify({
-        source: SOURCE_RECORDS_ON_FILE,
-        ...(live.note ? { live_status: live.note } : {}),
-        balance: 'unavailable',
-        value_inr: 'unavailable',
-        note: 'No reward points balance is on file for this account.',
-      });
-    }
-    return JSON.stringify({
-      source: SOURCE_RECORDS_ON_FILE,
-      ...(live.note ? { live_status: live.note } : {}),
-      balance: c.reward_points_balance,
-      value_inr: Math.round(c.reward_points_balance * REWARD_POINT_VALUE_INR),
-    });
+    return liveUnavailable('reward points', live.note);
   },
 });
 
@@ -259,13 +250,7 @@ export const getActiveEmisTool = defineTool({
     if (live.live) {
       return JSON.stringify({ source: 'live_provider', emis: live.data });
     }
-    const rows = await getActiveEmis(cid);
-    return JSON.stringify({
-      source: 'records_on_file',
-      ...(live.note ? { live_status: live.note } : {}),
-      count: rows.length,
-      emis: rows,
-    });
+    return liveUnavailable('EMIs', live.note);
   },
 });
 
@@ -855,13 +840,7 @@ export const getStatementsTool = defineTool({
     if (live.live) {
       return JSON.stringify({ source: 'live_provider', statements: live.data });
     }
-    const rows = await getStatements(cid, limit ? Number(limit) : 6);
-    return JSON.stringify({
-      source: 'records_on_file',
-      ...(live.note ? { live_status: live.note } : {}),
-      count: rows.length,
-      statements: rows,
-    });
+    return liveUnavailable('statements', live.note);
   },
 });
 

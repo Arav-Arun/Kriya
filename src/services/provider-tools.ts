@@ -457,7 +457,7 @@ export const liveHotlistCardTool = defineTool({
 export const liveReplaceCardTool = defineTool({
   name: 'live_replace_card',
   description:
-    'LIVE action: order a replacement card in the card system of record (for a damaged/lost card after hotlisting). CRITICAL and SENSITIVE — needs two-factor verification (verified channel + card last-4); if the tool returns requires_verification=true, verify and retry.',
+    'LIVE action: order a replacement card in the card system of record (for a damaged/lost card after hotlisting). CRITICAL and SENSITIVE — needs identity verification (the customer types their card last-4); if the tool returns requires_verification=true, verify and retry.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     reason: Type.String(),

@@ -15,7 +15,7 @@ import {
   renameConversation, deleteConversation, addAttachment,
   listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
-  logAction, getCustomerActionsLog,
+  logAction, getCustomerActionsLog, ProvisioningError,
 } from './database/queries.ts';
 import {
   SUPPORTED_UPLOAD_MIMES, normalizeMimeType, analyzeUpload,
@@ -124,7 +124,21 @@ app.post('/api/identify', async (c) => {
   const body = await c.req.json().catch(() => null) as { phone?: string } | null;
   const phone = String(body?.phone ?? '').replace(/\D/g, '');
   if (phone.length < 10) return c.json({ error: 'Enter a valid mobile number.' }, 400);
-  const match = await identifyByPhone(phone);
+  let match;
+  try {
+    match = await identifyByPhone(phone);
+  } catch (err) {
+    // The card account exists but local provisioning failed (e.g. pending DB
+    // migration). Surface a setup error — never the misleading "not found".
+    if (err instanceof ProvisioningError) {
+      console.error('[identify] provisioning failed:', err.message);
+      return c.json({
+        error: "We found your card account but couldn't finish setting up your profile. "
+          + "This is a setup issue on our side, not a problem with your number — please try again shortly.",
+      }, 502);
+    }
+    throw err;
+  }
   if (!match) {
     return c.json({
       error: "We couldn't find a card account for this number. Use the mobile number registered with your card.",
