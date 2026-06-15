@@ -81,31 +81,7 @@ message it from a link.
    tap **"Share my number"** so it can match their card account (a one-tap, Telegram-verified
    step); after that they just chat. Done.
 
-## 5. (Optional) Connect WhatsApp
-
-Needs a Meta WhatsApp Business number. Note: Meta's *free test number* only messages up to
-5 pre-registered recipients — fine for a demo, not for real customers.
-
-1. In the Meta developer dashboard, create a WhatsApp Business app and add a phone number.
-2. Set `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (any
-   string you choose), and `WHATSAPP_APP_SECRET`.
-3. In Meta's webhook settings, set the callback URL to
-   `https://your-domain/api/channels/whatsapp/webhook`, set the verify token to your
-   `WHATSAPP_VERIFY_TOKEN`, and subscribe to **messages**.
-4. Done. Anyone messaging your business number now reaches Kriya.
-
-## 6. (Optional, advanced) iMessage / Discord / more via OpenClaw
-
-Only needed for surfaces beyond Telegram and WhatsApp — and you run the OpenClaw gateway
-yourself as a separate service.
-
-1. Run your OpenClaw gateway and connect the surfaces (iMessage, Discord, …) to it.
-2. Set `OPENCLAW_API_KEY` (a secret you choose).
-3. Point OpenClaw's inbound at `https://your-domain/api/channels/openclaw/webhook` with the
-   header `Authorization: Bearer <OPENCLAW_API_KEY>`. The reply comes back in the response.
-4. Optional: set `OPENCLAW_CALLBACK_URL` / `OPENCLAW_CALLBACK_TOKEN` to also push proactive alerts.
-
-## 7. (Optional) Provider alerts (Hyperface webhooks)
+## 5. (Optional) Provider alerts (Hyperface webhooks)
 
 Set `HYPERFACE_WEBHOOK_SECRET`, then subscribe Kriya's receiver:
 
