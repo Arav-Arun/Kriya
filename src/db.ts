@@ -9,7 +9,7 @@ import { config } from './config/env.ts';
 if (!config.databaseUrl && config.deployed && !config.allowLocalFlueSqlite) {
   throw new Error(
     'Kriya refuses to start: deployed mode requires DATABASE_URL for Flue run state. '
-    + 'Set ALLOW_LOCAL_FLUE_SQLITE=true only for throwaway demos.',
+    + 'Set ALLOW_LOCAL_FLUE_SQLITE=true only for non-production deployments.',
   );
 }
 

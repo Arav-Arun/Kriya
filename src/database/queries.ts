@@ -328,7 +328,7 @@ export async function updateCustomerContext(input: {
   // worse, satisfy policy gates. The claim itself is preserved by the caller in
   // the audit log (action_type 'context_recorded', flagged unverified).
   //
-  // We previously also (a) deleted every payment row and regenerated a fake
+  // We previously also (a) deleted every payment row and regenerated a synthetic
   // on-time/late history using the current outstanding as every statement
   // amount, and (b) synthesised a late-fee row. Both fabricated authoritative
   // data from chat input and have been removed — real payment/fee rows are left

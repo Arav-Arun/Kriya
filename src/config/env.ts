@@ -140,13 +140,13 @@ export function enforceHostedGuardrails(cfg: KriyaConfig = config): void {
     if (!cfg.databaseUrl && !cfg.allowLocalFlueSqlite) {
       problems.push(
         'DATABASE_URL is required in deployed mode: Flue run state must live in hosted Postgres. '
-        + '(Set ALLOW_LOCAL_FLUE_SQLITE=true only for throwaway demos.)',
+        + '(Set ALLOW_LOCAL_FLUE_SQLITE=true only for non-production environments.)',
       );
     }
     if (!cfg.evidenceBucket && !cfg.allowLocalFlueSqlite) {
       problems.push(
         'KRIYA_EVIDENCE_BUCKET is required in deployed mode: evidence uploads must go to Supabase Storage, '
-        + 'not the local filesystem. (Set ALLOW_LOCAL_FLUE_SQLITE=true to bypass this check.)',
+        + 'not the local filesystem. (Set ALLOW_LOCAL_FLUE_SQLITE=true for non-production environments.)',
       );
     }
     if (cfg.telegram.botToken && !cfg.telegram.webhookSecret) {
