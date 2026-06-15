@@ -6,13 +6,13 @@
 
 ## Description
 
-Allows eligible credit card transactions to be converted into equated monthly instalments (EMIs) of 3, 6, 9, 12, 18, or 24 months. Interest is charged at 13–16% p.a. (reducing balance) depending on tenure and customer segment, with a one-time processing fee of 1% of the transaction amount (minimum ₹199) plus GST.
+Allows eligible credit card transactions to be converted into equated monthly instalments (EMIs) of 3, 6, 9, 12, 18, or 24 months. Interest is charged at 13-16% p.a. (reducing balance) depending on tenure and customer segment, with a one-time processing fee of 1% of the transaction amount (minimum ₹199) plus GST.
 
 ## Eligibility Rules
 
 1. Transaction amount must be ₹2,500 or above.
 2. Conversion must be requested within 30 days of the transaction date and before the bill due date for that cycle.
-3. The card account must be current — no overdue amount and not in any collections bucket.
+3. The card account must be current; no overdue amount and not in any collections bucket.
 4. Excluded categories: gold and jewellery purchases, fuel, cash advances, wallet loads, and EMI-on-EMI (already converted transactions).
 5. Total EMI exposure after conversion must not exceed 80% of the credit limit.
 

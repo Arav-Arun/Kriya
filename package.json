@@ -1,14 +1,15 @@
 {
-  "name": "sentinel",
+  "name": "kriya",
   "version": "1.0.0",
-  "description": "Agentic credit-card resolution platform, built with Flue",
+  "description": "Kriya: agentic CardOps platform for Indian credit programs (Nivaran, Kavach, CreditOps, Vaani), built with Flue",
   "scripts": {
     "dev": "flue dev --target node",
     "build": "flue build --target node",
     "typecheck": "tsc --noEmit",
     "chat": "flue run chat-turn --target node --payload",
     "start": "flue build --target node && PORT=3583 node --env-file=.env dist/server.mjs",
-    "serve": "node --env-file=.env dist/server.mjs"
+    "serve": "node --env-file=.env dist/server.mjs",
+    "doctor": "npx react-doctor@latest"
   },
   "keywords": [],
   "author": "",

@@ -6,13 +6,13 @@
 
 ## Description
 
-A fraud transaction is any transaction not authorized by the cardholder — including card-not-present (CNP) online fraud, skimming/cloning at POS or ATM, phishing/vishing-induced OTP compromise, and account takeover. Fraud cases require immediate containment (card block) before investigation begins.
+A fraud transaction is any transaction not authorized by the cardholder, including card-not-present (CNP) online fraud, skimming/cloning at POS or ATM, phishing/vishing-induced OTP compromise, and account takeover. Fraud cases require immediate containment (card block) before investigation begins.
 
 ## Eligibility Rules
 
 1. Customer liability follows RBI limited-liability guidelines:
    - Reported within 3 working days of the transaction: zero customer liability.
-   - Reported within 4–7 working days: customer liability capped at ₹10,000 or the transaction amount, whichever is lower.
+   - Reported within 4-7 working days: customer liability capped at ₹10,000 or the transaction amount, whichever is lower.
    - Reported after 7 working days: liability per the bank's board-approved policy.
 2. The card must be blocked immediately upon report; investigation cannot proceed on an active compromised card.
 3. Transactions where the customer admits to sharing OTP/PIN are classified "customer-induced" and assessed separately, but the card is still blocked and re-issued.
@@ -50,4 +50,4 @@ Fraud Operations
 5. Apply the RBI limited-liability matrix based on report timing.
 6. Post shadow credit within 10 working days; raise network chargebacks with fraud reason codes where applicable.
 7. Re-issue the card with a new number; reset all digital tokens.
-8. Close with disposition "Fraud Confirmed — Customer Refunded", "Customer-Induced", or "Fraud Not Established", with written rationale.
+8. Close with disposition "Fraud Confirmed - Customer Refunded", "Customer-Induced", or "Fraud Not Established", with written rationale.

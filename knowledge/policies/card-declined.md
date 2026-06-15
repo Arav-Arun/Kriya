@@ -12,7 +12,7 @@ Covers customer complaints where a transaction was declined at POS, e-commerce c
 
 1. Any cardholder with an issued card may raise a decline complaint; the card need not be active (the status itself may be the cause).
 2. Authorization logs are retained for 180 days; declines older than that cannot be investigated.
-3. Declines caused by merchant/acquirer outages are logged but closed as "external" — no issuer remediation possible.
+3. Declines caused by merchant/acquirer outages are logged but closed as "external"; no issuer remediation possible.
 
 ## Required Documents
 

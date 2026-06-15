@@ -14,7 +14,7 @@ Covers enablement and control of international card usage, forex markup billing,
 2. Forex markup of 3.5% plus GST applies on the converted INR amount for non-INR transactions.
 3. DCC (paying in INR at a foreign merchant) is the merchant's conversion; markup disputes on DCC transactions are explained, not refunded, unless the customer was not offered a currency choice.
 4. International spends are reportable under LRS; TCS at the prevailing rate applies on aggregate international spends above the annual threshold (₹7,00,000), collected through the card statement.
-5. Transactions in foreign currency with Indian merchants (e.g., onward billing) are treated as international for markup purposes — disputes on this are eligible for review.
+5. Transactions in foreign currency with Indian merchants (e.g., onward billing) are treated as international for markup purposes; disputes on this are eligible for review.
 
 ## Required Documents
 

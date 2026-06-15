@@ -17,6 +17,7 @@ data/.sentinel.db-wal
 
 # Claude / AI metadata
 .claude/
+.agents/
 
 # OS files
 .DS_Store
