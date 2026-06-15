@@ -650,18 +650,18 @@ export const liveForecloseEmiTool = defineTool({
 export const getLiveBilledTransactionsTool = defineTool({
   name: 'get_live_billed_transactions',
   description:
-    'LIVE provider data: transactions that have been billed in the most recent statement. Use for "what was on my last bill" or "show billed charges" questions. Contrasts with unbilled (current cycle).',
+    'LIVE provider data: the billed transactions on a SPECIFIC statement. REQUIRES a statement_id — call get_statements first, then pass the chosen statement\'s id here. Use for "what was on my <month> bill / show billed charges" questions. Contrasts with get_live_unbilled (current cycle, no statement needed).',
   parameters: Type.Object({
     customer_id: Type.Number(),
-    from: Type.Optional(Type.String({ description: 'Start date yyyy-mm-dd' })),
-    to: Type.Optional(Type.String({ description: 'End date yyyy-mm-dd' })),
-    count: Type.Optional(Type.Number({ description: 'Max transactions' })),
+    statement_id: Type.String({ description: 'The statement id whose billed transactions to fetch (from get_statements)' }),
+    count: Type.Optional(Type.Number({ description: 'Max transactions, default 50' })),
+    offset: Type.Optional(Type.Number({ description: 'Page offset, default 0' })),
   }),
-  execute: async ({ customer_id, from, to, count }) =>
+  execute: async ({ customer_id, statement_id, count, offset }) =>
     withBinding(Number(customer_id), (b) => hyperfaceProvider.billedTransactions(b.accountId, {
-      from: from ? String(from) : undefined,
-      to: to ? String(to) : undefined,
+      statementId: String(statement_id),
       count: count != null ? Number(count) : undefined,
+      offset: offset != null ? Number(offset) : undefined,
     })),
 });
 

@@ -86,6 +86,14 @@ export interface LiveTransactionFilters {
   checkEmiEligibility?: boolean;
 }
 
+/** Billed transactions are fetched per statement: statementId is REQUIRED by the
+ *  provider (get it from a statement), with optional pagination. No date range. */
+export interface LiveBilledFilters {
+  statementId: string;
+  count?: number;
+  offset?: number;
+}
+
 export interface MutationOptions {
   /**
    * Hyperface caches responses (including 5xx!) against x-idempotency-key for
@@ -150,8 +158,8 @@ export interface CardProvider {
   statements(accountId: string, range?: { from: string; to: string }): Promise<ProviderResult<unknown>>; // Fetch statements in a date range (provider caps the window at 180 days)
   downloadStatement(accountId: string, statementId: string): Promise<ProviderResult<unknown>>; // documented (unverified) — returns a non-JSON document body
   transactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>; // documented (unverified)
-  billedTransactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>; // documented (unverified)
-  unbilledTransactions(accountId: string): Promise<ProviderResult<unknown>>;      // documented (unverified)
+  billedTransactions(accountId: string, f: LiveBilledFilters): Promise<ProviderResult<unknown>>; // requires statementId (from a statement)
+  unbilledTransactions(accountId: string, opts?: { count?: number; offset?: number }): Promise<ProviderResult<unknown>>;
   transactionInquiry(q: { id?: string; extTxnRefId?: string }): Promise<ProviderResult<unknown>>; // documented (unverified)
   debitTransaction(input: { accountId: string; amount: number; debitTransactionType?: string; description: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   /** REFUND / CHARGEBACK postings (documented, unverified). */
