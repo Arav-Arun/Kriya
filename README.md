@@ -1,6 +1,6 @@
 # Kriya
 
-Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card programs. Built on the [Flue framework](https://flueframework.com), it lets cardholders manage their accounts, resolve disputes, and configure cards in plain language (or via voice and attachments), while running strict policy gates and updating the bank system-of-record.
+Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card programs. It lets cardholders manage their accounts, resolve disputes, and configure cards in plain language (or via voice and attachments), while running strict policy gates and updating the bank system-of-record.
 
 ---
 
