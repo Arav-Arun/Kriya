@@ -48,7 +48,7 @@ class LocalEvidenceStorage implements EvidenceStorage {
   constructor(private root: string) {}
 
   async put(filename: string, mimeType: string, bytes: Buffer): Promise<StoredObject> {
-    if (config.deployed) {
+    if (config.deployed && !config.allowLocalFlueSqlite) {
       throw new Error('Local evidence storage is disabled in deployed mode. Configure KRIYA_EVIDENCE_BUCKET.');
     }
     const uploadDir = path.join(this.root, 'data', 'uploads');

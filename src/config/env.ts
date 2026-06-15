@@ -167,10 +167,10 @@ export function enforceHostedGuardrails(cfg: KriyaConfig = config): void {
         + '(Set ALLOW_LOCAL_FLUE_SQLITE=true only for throwaway demos.)',
       );
     }
-    if (!cfg.evidenceBucket) {
+    if (!cfg.evidenceBucket && !cfg.allowLocalFlueSqlite) {
       problems.push(
         'KRIYA_EVIDENCE_BUCKET is required in deployed mode: evidence uploads must go to Supabase Storage, '
-        + 'not the local filesystem.',
+        + 'not the local filesystem. (Set ALLOW_LOCAL_FLUE_SQLITE=true to bypass this check.)',
       );
     }
     if (cfg.telegram.botToken && !cfg.telegram.webhookSecret) {
