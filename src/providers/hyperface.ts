@@ -70,6 +70,10 @@ async function call<T>(
   const headers: Record<string, string> = {
     apikey: hf.secretKey!,
     'x-tenant-id': hf.tenantId,
+    // Hyperface versions its endpoints via this header (latest v2). Without it
+    // the gateway defaults to v1; sending it explicitly per the API spec
+    // future-proofs the newer feeds (transactions, etc.).
+    'x-accept-hf-version': hf.apiVersion,
     'content-type': 'application/json',
   };
   if (init.idempotencyKey) headers['x-idempotency-key'] = init.idempotencyKey;

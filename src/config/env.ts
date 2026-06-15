@@ -41,6 +41,9 @@ export interface KriyaConfig {
     baseUrl: string;
     /** Datasource selector — "DEFAULT" for our UAT programs (per Hyperface). */
     tenantId: string;
+    /** API version sent as x-accept-hf-version. Hyperface versions its endpoints
+     *  via this header; without it the gateway defaults to v1. Latest is v2. */
+    apiVersion: string;
     accessKey: string | undefined;
     secretKey: string | undefined;
     programId: string | undefined;
@@ -109,6 +112,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
     hyperface: {
       baseUrl: env.HYPERFACE_BASE_URL || 'https://api-uat.hyperface.co',
       tenantId: env.HYPERFACE_TENANT_ID || 'DEFAULT',
+      apiVersion: env.HYPERFACE_API_VERSION || 'v2',
       accessKey: env.HYPERFACE_ACCESS_KEY || undefined,
       secretKey: env.HYPERFACE_SECRET_KEY || undefined,
       programId: env.HYPERFACE_PROGRAM_ID || undefined,
