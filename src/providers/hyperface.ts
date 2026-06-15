@@ -129,6 +129,15 @@ function idem(o?: MutationOptions): string {
   return o?.idempotencyKey ?? `kriya-${randomUUID()}`;
 }
 
+/** The statements endpoint requires a { from, to } body and the provider caps
+ *  the window at 180 days. Default to roughly the last 180 days (yyyy-MM-dd). */
+function defaultStatementWindow(): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to.getTime() - 179 * 86_400_000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: fmt(from), to: fmt(to) };
+}
+
 export const hyperfaceProvider: CardProvider = {
   name: 'hyperface',
   get configured() { return config.hyperface.configured; },
@@ -177,7 +186,7 @@ export const hyperfaceProvider: CardProvider = {
   setCardControls: (cardId, controls, o) => call(`/cards/${cardId}/cardControls`, { method: 'POST', body: controls, idempotencyKey: idem(o) }),
 
   // ── Transactions ─────────────────────────────────────────────────────────
-  statements: (accountId) => call(`/accounts/${accountId}/statements`, { method: 'POST', body: {} }),
+  statements: (accountId, range) => call(`/accounts/${accountId}/statements`, { method: 'POST', body: range ?? defaultStatementWindow() }),
   downloadStatement: (accountId, statementId) => call(`/accounts/${accountId}/statements/${statementId}/download`, { method: 'GET', expectText: true }),
   transactions: (accountId, f) => call(`/accounts/${accountId}/transactions`, { method: 'POST', body: f ?? {} }),
   billedTransactions: (accountId, f) => call(`/accounts/${accountId}/billed`, { method: 'POST', body: f ?? {} }),

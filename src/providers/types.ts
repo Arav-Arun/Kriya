@@ -147,7 +147,7 @@ export interface CardProvider {
   setCardControls(cardId: string, controls: unknown, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Transactions ─────────────────────────────────────────────────────────
-  statements(accountId: string): Promise<ProviderResult<unknown>>;               // documented (unverified) — Fetch Statement Summary
+  statements(accountId: string, range?: { from: string; to: string }): Promise<ProviderResult<unknown>>; // Fetch statements in a date range (provider caps the window at 180 days)
   downloadStatement(accountId: string, statementId: string): Promise<ProviderResult<unknown>>; // documented (unverified) — returns a non-JSON document body
   transactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>; // documented (unverified)
   billedTransactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>; // documented (unverified)
