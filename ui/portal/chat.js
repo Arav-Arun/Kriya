@@ -420,12 +420,16 @@ function bootChat(customer) {
           } else if (ev.type === 'log' && ev.message === 'turn') {
             turnData = ev.attributes ?? {};
           } else if (ev.type === 'text_delta' && resolutionStreaming) {
+            const textDelta = ev.text ?? '';
+            if (!streamBubble && !textDelta) {
+              return;
+            }
             if (!streamBubble) {
               removeTyping();
               streamBubble = addBubble('assistant', '');
               streamBubble.classList.add('bubble-streaming');
             }
-            streamedText += ev.text ?? '';
+            streamedText += textDelta;
             streamBubble.innerHTML = md(streamedText);
             scrollDown();
           } else if (ev.type === 'run_end') {
