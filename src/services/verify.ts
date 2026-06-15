@@ -3,8 +3,7 @@
 //
 // Factor model (deterministic, auditable):
 //   1. POSSESSION — the message arrived on a trusted channel bound to the
-//      registered mobile number (the WhatsApp/Telegram webhooks are verified;
-//      the /whatsapp simulator simulates this). The web copilot's
+//      registered mobile number (the Telegram webhook is verified). The web copilot's
 //      sessionStorage picker is UNTRUSTED, so it never grants possession.
 //   2. KNOWLEDGE — the customer states their card's last 4 digits in chat and
 //      it matches the account record. Valid 30 minutes.
@@ -131,7 +130,7 @@ export async function assertActionAllowed(customerId: number, actionType: string
     level,
     reason: needed === 'knowledge'
       ? `"${actionType}" is a sensitive action and needs identity verification — ask the customer for the last 4 digits of their card (current: ${level}).`
-      : `"${actionType}" is a sensitive action and additionally needs a verified channel: the customer must be on their registered WhatsApp/Telegram, not the web (current: ${level}).`,
+      : `"${actionType}" is a sensitive action and additionally needs a verified channel: the customer must be on their registered Telegram, not the web (current: ${level}).`,
     needed,
   };
 }

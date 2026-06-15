@@ -11,15 +11,11 @@ import { hyperfaceProvider } from '../providers/hyperface.ts';
 import { invalidateLiveBinding } from '../services/provider-tools.ts';
 import { phoneKey } from './types.ts';
 import type { ChannelAdapter, ChannelKind, InboundChannelMessage } from './types.ts';
-import { whatsappAdapter } from './whatsapp.ts';
 import { telegramAdapter, rememberContact as rememberTelegramBinding } from './telegram.ts';
-import { openclawAdapter } from './openclaw.ts';
 
 /** Outbound adapter registry for proactive (provider-event) delivery. */
 const ADAPTERS: Partial<Record<ChannelKind, ChannelAdapter>> = {
-  whatsapp: whatsappAdapter,
   telegram: telegramAdapter,
-  openclaw: openclawAdapter,
 };
 
 interface MatchedCustomer {

@@ -23,9 +23,7 @@ import {
 import { evidenceStorage } from './services/storage.ts';
 import { config, enforceHostedGuardrails, updateTelegramConfig } from './config/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
-import { whatsappAdapter, verifySubscribe, verifySignature, parseWebhook } from './channels/whatsapp.ts';
 import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact } from './channels/telegram.ts';
-import { openclawAdapter, verifyOpenClawToken, parseOpenClawInbound } from './channels/openclaw.ts';
 import { handleInbound, notifyCustomer, customerIdByPhone, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
 import { hyperfaceProvider } from './providers/hyperface.ts';
 import { linkedLiveSummary } from './services/provider-tools.ts';
@@ -103,9 +101,7 @@ app.get('/api/web/config', async (c) => c.json({
   demo_phone: config.demoPhone ?? null,
   voice_enabled: voiceEnabled(),
   channels: {
-    whatsapp: whatsappAdapter.configured,
     telegram: telegramAdapter.configured,
-    openclaw: openclawAdapter.configured,
     hyperface: config.providerMode === 'hyperface_uat' && hyperfaceProvider.configured,
   },
   telegram_username: await getTelegramBotUsername(),
@@ -384,56 +380,7 @@ app.post('/api/voice/speak', async (c) => {
 });
 
 // ── Channel webhooks (Hermes) ─────────────────────────────────────────
-// Meta WhatsApp Cloud API verification handshake.
-app.get('/api/channels/whatsapp/webhook', (c) => {
-  const challenge = verifySubscribe({
-    'hub.mode': c.req.query('hub.mode'),
-    'hub.verify_token': c.req.query('hub.verify_token'),
-    'hub.challenge': c.req.query('hub.challenge'),
-  });
-  return challenge ? c.text(challenge) : c.text('Forbidden', 403);
-});
 
-// Inbound WhatsApp events. ACK fast; Hermes processes asynchronously.
-app.post('/api/channels/whatsapp/webhook', async (c) => {
-  const raw = await c.req.text();
-  if (!verifySignature(raw, c.req.header('x-hub-signature-256'))) {
-    return c.json({ error: 'Bad signature' }, 401);
-  }
-  let body: unknown;
-  try { body = JSON.parse(raw); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-
-  const inbound = parseWebhook(body);
-  for (const msg of inbound) {
-    handleInbound(msg, whatsappAdapter).catch((err) => {
-      console.error('[hermes] inbound processing failed:', err);
-    });
-  }
-  return c.json({ received: inbound.length });
-});
-
-// OpenClaw: the customer's own agent gateway (Telegram, iMessage, Discord, …)
-// calls in with a bearer token; the reply returns synchronously in the body.
-// OPENCLAW_CALLBACK_URL additionally enables proactive push.
-app.post('/api/channels/openclaw/webhook', async (c) => {
-  if (!config.openclaw.configured) return c.json({ error: 'OpenClaw channel not configured' }, 503);
-  if (!verifyOpenClawToken(c.req.header('authorization'))) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  const body = await c.req.json().catch(() => null);
-  if (!body) return c.json({ error: 'Invalid JSON' }, 400);
-  const msg = parseOpenClawInbound(body);
-  if (!msg) return c.json({ error: 'from and text are required' }, 400);
-
-  const outcome = await handleInbound(msg, openclawAdapter);
-  return c.json({
-    matched: outcome.matched,
-    deduped: outcome.deduped ?? false,
-    reply: outcome.reply,
-    conversation_id: outcome.conversation_id,
-    status: outcome.status,
-  });
-});
 
 // Telegram Bot API: a single webhook receives every Update. Auth is the secret
 // token echoed in the X-Telegram-Bot-Api-Secret-Token header (set at

@@ -4,7 +4,7 @@
 // payloads and these normalized shapes — the Hermes orchestrator never sees
 // raw provider JSON.
 
-export type ChannelKind = 'whatsapp' | 'telegram' | 'openclaw' | 'simulator';
+export type ChannelKind = 'telegram' | 'simulator';
 
 export interface InboundChannelMessage {
   channel: ChannelKind;

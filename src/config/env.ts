@@ -29,13 +29,7 @@ export interface KriyaConfig {
   /** Optional demo mobile number the web sign-in screen offers as a shortcut. */
   demoPhone: string | undefined;
   webhookSigningSecret: string | undefined;
-  whatsapp: {
-    accessToken: string | undefined;
-    phoneNumberId: string | undefined;
-    verifyToken: string | undefined;
-    appSecret: string | undefined;
-    configured: boolean;
-  };
+
   telegram: {
     /** Bot token from @BotFather; presence enables the Telegram channel. */
     botToken: string | undefined;
@@ -60,14 +54,7 @@ export interface KriyaConfig {
     allowMutations: boolean;
     configured: boolean;
   };
-  openclaw: {
-    /** Shared token OpenClaw agents present on the inbound webhook. */
-    apiKey: string | undefined;
-    /** Where to push outbound/proactive messages (optional; sync replies work without it). */
-    callbackUrl: string | undefined;
-    callbackToken: string | undefined;
-    configured: boolean;
-  };
+
 }
 
 function flag(value: string | undefined, fallback = false): boolean {
@@ -113,13 +100,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
     appBaseUrl: env.APP_BASE_URL || `http://127.0.0.1:${port}`,
     demoPhone: env.DEMO_PHONE || undefined,
     webhookSigningSecret: env.WEBHOOK_SIGNING_SECRET || undefined,
-    whatsapp: {
-      accessToken: env.WHATSAPP_ACCESS_TOKEN || undefined,
-      phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID || undefined,
-      verifyToken: env.WHATSAPP_VERIFY_TOKEN || undefined,
-      appSecret: env.WHATSAPP_APP_SECRET || undefined,
-      configured: Boolean(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
-    },
+
     telegram: {
       botToken: env.TELEGRAM_BOT_TOKEN || undefined,
       webhookSecret: env.TELEGRAM_WEBHOOK_SECRET || undefined,
@@ -138,12 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
       allowMutations: flag(env.HYPERFACE_ALLOW_MUTATIONS, false),
       configured: Boolean(env.HYPERFACE_SECRET_KEY),
     },
-    openclaw: {
-      apiKey: env.OPENCLAW_API_KEY || undefined,
-      callbackUrl: env.OPENCLAW_CALLBACK_URL || undefined,
-      callbackToken: env.OPENCLAW_CALLBACK_TOKEN || undefined,
-      configured: Boolean(env.OPENCLAW_API_KEY),
-    },
+
   };
 }
 
@@ -186,13 +162,12 @@ export function enforceHostedGuardrails(cfg: KriyaConfig = config): void {
     throw new Error(`Kriya cannot start (${mode} mode):\n- ${problems.join('\n- ')}`);
   }
 
-  console.log(
-    `[kriya] mode=${cfg.deployed ? 'deployed' : 'development'} provider=${cfg.providerMode} `
-    + `voice=${cfg.voiceEnabled ? 'sarvam' : (cfg.voiceProvider === 'mock' ? 'mock-dev' : 'disabled')} `
-    + `flue-state=${cfg.databaseUrl ? 'postgres' : 'local-sqlite'} `
-    + `evidence=${cfg.evidenceBucket ? `supabase:${cfg.evidenceBucket}` : 'local'} `
-    + `whatsapp=${cfg.whatsapp.configured ? 'cloud-api' : 'unconfigured'}`,
-  );
+    console.log(
+      `[kriya] mode=${cfg.deployed ? 'deployed' : 'development'} provider=${cfg.providerMode} `
+      + `voice=${cfg.voiceEnabled ? 'sarvam' : (cfg.voiceProvider === 'mock' ? 'mock-dev' : 'disabled')} `
+      + `flue-state=${cfg.databaseUrl ? 'postgres' : 'local-sqlite'} `
+      + `evidence=${cfg.evidenceBucket ? `supabase:${cfg.evidenceBucket}` : 'local'}`,
+    );
 }
 
 export function updateTelegramConfig(botToken: string, webhookSecret: string): void {
