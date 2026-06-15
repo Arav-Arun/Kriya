@@ -200,9 +200,13 @@ export const hyperfaceProvider: CardProvider = {
 
   // ── EMI ──────────────────────────────────────────────────────────────────
   emiConfig: (accountId, q) => {
+    // GET /accounts/emi?accountId=&amount=|txnRefId=&emiType=. The provider
+    // requires EITHER a positive amount OR a txnRefId; emiType selects which
+    // outstanding to convert when no single purchase is named.
     const params = new URLSearchParams({ accountId });
     if (q?.amount != null) params.set('amount', String(q.amount));
     if (q?.txnRefId) params.set('txnRefId', q.txnRefId);
+    if (q?.emiType) params.set('emiType', q.emiType);
     return call(`/accounts/emi?${params}`, { method: 'GET' });
   },
   createEmi: (input, o) => call('/accounts/emi/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),

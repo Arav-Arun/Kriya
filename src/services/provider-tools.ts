@@ -326,13 +326,15 @@ export const getLiveEmiOfferTool = defineTool({
     'LIVE provider data: the EMI conversion offer for a purchase — available tenures, interest rate, processing fee and the resulting monthly installment, computed by the card system of record. Call this to quote real EMI terms before live_create_emi. Provide the amount, or the transaction ref id to convert.',
   parameters: Type.Object({
     customer_id: Type.Number(),
-    amount: Type.Optional(Type.Number({ description: 'Purchase amount to convert to EMI' })),
-    txn_ref_id: Type.Optional(Type.String({ description: 'Provider transaction ref id to convert' })),
+    amount: Type.Optional(Type.Number({ description: 'Purchase amount to convert to EMI (pass this OR txn_ref_id)' })),
+    txn_ref_id: Type.Optional(Type.String({ description: 'Provider transaction ref id to convert (pass this OR amount)' })),
+    emi_type: Type.Optional(Type.String({ description: 'TOTAL_OUTSTANDING or LAST_BILLED_OUTSTANDING — for converting outstanding (not a single purchase) to EMI' })),
   }),
-  execute: async ({ customer_id, amount, txn_ref_id }) =>
+  execute: async ({ customer_id, amount, txn_ref_id, emi_type }) =>
     withBinding(Number(customer_id), (b) => hyperfaceProvider.emiConfig(b.accountId, {
       amount: amount != null ? Number(amount) : undefined,
       txnRefId: txn_ref_id ? String(txn_ref_id) : undefined,
+      emiType: emi_type === 'TOTAL_OUTSTANDING' || emi_type === 'LAST_BILLED_OUTSTANDING' ? emi_type : undefined,
     })),
 });
 

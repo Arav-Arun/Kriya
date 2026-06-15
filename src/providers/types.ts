@@ -169,7 +169,7 @@ export interface CardProvider {
   nudges(accountId: string): Promise<ProviderResult<unknown>>;
 
   // ── EMI ──────────────────────────────────────────────────────────────────
-  emiConfig(accountId: string, q?: { amount?: number; txnRefId?: string }): Promise<ProviderResult<unknown>>;
+  emiConfig(accountId: string, q?: { amount?: number; txnRefId?: string; emiType?: 'TOTAL_OUTSTANDING' | 'LAST_BILLED_OUTSTANDING' }): Promise<ProviderResult<unknown>>;
   createEmi(input: { accountId: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   emiList(accountId: string): Promise<ProviderResult<unknown>>;
   forecloseEmi(input: { accountId: string; emiRefId: string; interestCharged: number }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
