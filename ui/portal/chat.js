@@ -1,4 +1,4 @@
-import { esc, md, inr, fmtWhen, daysUntil } from '../shared/utils.js';
+import { esc, md, inr, fmtWhen, daysUntil, wavFromBlob } from '../shared/utils.js';
 const ACTION_RENDER = {
   fee_waived: (d) => ['green', `Fee waived — ${inr(d?.amount)} ${String(d?.fee_type ?? '').replace(/_/g, ' ')} reversed`, d?.new_outstanding_total != null ? `Outstanding is now ${inr(d.new_outstanding_total)}` : ''],
   refund_initiated: (d) => ['green', `Refund credited — ${inr(d?.amount)} from ${d?.merchant ?? 'merchant'}`, d?.new_available_limit != null ? `Available limit is now ${inr(d.new_available_limit)}` : ''],
@@ -20,6 +20,35 @@ const ACTION_RENDER = {
   dispute_raised: (d) => ['amber', `Dispute raised — ${d?.dispute_id ?? ''} · ${inr(d?.amount)} at ${d?.merchant ?? 'merchant'}`, 'Provisional credit within 7 working days; resolution in 30–45 days per RBI'],
   subscription_cancelled: (d) => ['green', `Subscription cancelled — ${d?.merchant ?? ''} ${inr(d?.amount)}/${d?.billing_cycle === 'annual' ? 'yr' : 'mo'}`, 'Autopay mandate revoked — no further charges to your card'],
 };
+
+// Starter prompts, paged (3×3 grid per page) so the welcome stays compact while
+// covering the full surface — reads, spend insights, and the write actions Kriya
+// can take.
+const SUGGESTION_PAGES = [
+  [
+    'Check my outstanding balance',
+    'Where did my money go this month?',
+    'Show my recent transactions',
+    "What's on my latest statement?",
+    'Is my card active or blocked?',
+    'What are my EMI options?',
+    'Block my card',
+    'Help me dispute a wrong charge',
+    'Convert my outstanding to EMI',
+  ],
+  [
+    'Waive my late fee',
+    'Increase my credit limit',
+    'Set up autopay',
+    'Turn off international usage',
+    'Disable online (card-not-present) payments',
+    'Cancel a subscription',
+    'What perks does my card have?',
+    'Show my active EMIs',
+    'What autopays are active?',
+  ],
+];
+let suggestionPage = 0;
 
 const storedCustomer = JSON.parse(sessionStorage.getItem('customer') || 'null');
 if (storedCustomer) {
@@ -200,26 +229,125 @@ function bootChat(customer) {
     }
   }
 
+  // ── generative cards (balance / spend / transactions / EMI) ─────────
+  // Rendered from the structured `ui_card` action the resolution agent logs;
+  // every figure is live provider data, the agent never fabricates a card.
+  const fmtCardDate = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  };
+
+  function cardBalance(c) {
+    const util = c.utilisation != null ? Math.max(0, Math.min(100, c.utilisation)) : null;
+    const utilClass = util == null ? '' : util >= 85 ? 'util-high' : util >= 60 ? 'util-warn' : 'util-ok';
+    const tag = c.status && c.status !== 'active'
+      ? `<span class="kc-tag ${c.status === 'hotlisted' ? 'red' : 'amber'}">${esc(c.status)}</span>` : '';
+    return `
+      <div class="kc-head"><span class="kc-label">Outstanding balance</span>${tag}</div>
+      <div class="kc-amount">${inr(c.outstanding)}</div>
+      ${util != null ? `<div class="kc-bar"><i class="${utilClass}" style="width:${util}%"></i></div>` : ''}
+      <div class="kc-foot">
+        ${c.available != null ? `<span><b>${inr(c.available)}</b> available</span>` : ''}
+        ${c.limit != null ? `<span><b>${inr(c.limit)}</b> limit${util != null ? ` · ${util}% used` : ''}</span>` : ''}
+      </div>`;
+  }
+
+  function cardSpend(c) {
+    const days = (() => {
+      const a = new Date(c.window?.from), b = new Date(c.window?.to);
+      const n = Math.round((b - a) / 86400000);
+      return Number.isFinite(n) ? n : null;
+    })();
+    const label = days != null && days >= 28 && days <= 31
+      ? 'Spending · last 30 days'
+      : (c.window?.from ? `Spending · ${fmtCardDate(c.window.from)}–${fmtCardDate(c.window.to)}` : 'Spending');
+    const cats = (c.categories || []).map((cat) => `
+      <li>
+        <span class="kc-cat-name">${esc(cat.label)}</span>
+        <span class="kc-cat-bar"><i style="width:${Math.max(4, cat.pct)}%"></i></span>
+        <span class="kc-cat-amt">${inr(cat.amount)}</span>
+      </li>`).join('');
+    return `
+      <div class="kc-head"><span class="kc-label">${esc(label)}</span><span class="kc-amount-sm">${inr(c.total)}</span></div>
+      <ul class="kc-cats">${cats}</ul>
+      <div class="kc-foot">
+        <span>${c.count} purchase${c.count === 1 ? '' : 's'}</span>
+        ${c.unbilled != null ? `<span><b>${inr(c.unbilled)}</b> building toward next bill</span>` : ''}
+      </div>`;
+  }
+
+  function cardTxns(c) {
+    const rows = (c.rows || []).map((r) => `
+      <li>
+        <span class="kc-row-main"><strong>${esc(r.label)}</strong>${r.date ? `<small>${esc(fmtCardDate(r.date))}</small>` : ''}</span>
+        <b class="kc-row-amt ${r.nature === 'credit' ? 'credit' : ''}">${r.nature === 'credit' ? '+' : ''}${inr(r.amount)}</b>
+      </li>`).join('');
+    return `<div class="kc-head"><span class="kc-label">Recent transactions</span></div><ul class="kc-rows">${rows}</ul>`;
+  }
+
+  function cardEmi(c) {
+    const amt = c.amount != null ? ` · ${inr(c.amount)}` : '';
+    const plans = (c.plans || []).map((p) => `
+      <li class="kc-plan" data-tenure="${esc(p.tenure)}" role="button" tabindex="0">
+        <span class="kc-plan-t">${esc(p.tenure)} months</span>
+        <span class="kc-plan-m"><b>${inr(p.monthly)}</b>/mo</span>
+        ${p.rate != null ? `<small>${esc(p.rate)}% p.a.</small>` : ''}
+      </li>`).join('');
+    return `<div class="kc-head"><span class="kc-label">EMI options${amt}</span></div><ul class="kc-plans">${plans}</ul><div class="kc-hint">Tap a plan to convert</div>`;
+  }
+
+  function addCard(card) {
+    if (!card || !card.type) return;
+    const body = card.type === 'balance' ? cardBalance(card)
+      : card.type === 'spend' ? cardSpend(card)
+      : card.type === 'transactions' ? cardTxns(card)
+      : card.type === 'emi_offer' ? cardEmi(card)
+      : null;
+    if (!body) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'msg msg-assistant';
+    wrap.innerHTML = `<div class="kc kc-${esc(card.type)}">${body}</div>`;
+    if (card.type === 'emi_offer') {
+      wrap.querySelectorAll('.kc-plan').forEach((el) => {
+        const tenure = el.dataset.tenure;
+        const go = () => send(`Convert my outstanding balance to a ${tenure}-month EMI`);
+        el.addEventListener('click', go);
+        el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      });
+    }
+    if (messagesEl) { messagesEl.appendChild(wrap); scrollDown(); }
+  }
+
+  // Render either a side-effect action card or a presentational ui_card.
+  function addAction(a) {
+    if (a?.type === 'ui_card') addCard(a.detail?.card);
+    else addActionCard(a);
+  }
+
   function updateSuggestions() {
     const suggestionsEl = document.getElementById('suggestions');
+    const pagerEl = document.getElementById('suggestion-pager');
     if (!suggestionsEl) return;
+    const pages = SUGGESTION_PAGES;
 
-    const chips = [
-      'Check my outstanding balance',
-      'What is my available credit limit?',
-      'Is my card active or blocked?',
-      'I want to increase my credit limit',
-      'Block my card',
-      'Help me dispute a wrong charge',
-    ];
+    const renderPage = () => {
+      const chips = pages[suggestionPage] || [];
+      suggestionsEl.innerHTML = chips.map((text) => `<button class="chip">${esc(text)}</button>`).join('');
+      suggestionsEl.querySelectorAll('.chip').forEach((chip) => { chip.onclick = () => send(chip.textContent); });
+      if (pagerEl) {
+        pagerEl.hidden = pages.length <= 1;
+        const pg = pagerEl.querySelector('.sg-page');
+        if (pg) pg.textContent = `${suggestionPage + 1} / ${pages.length}`;
+      }
+    };
 
-    suggestionsEl.innerHTML = chips
-      .map((text) => `<button class="chip">${esc(text)}</button>`)
-      .join('');
-
-    suggestionsEl.querySelectorAll('.chip').forEach((chip) => {
-      chip.onclick = () => send(chip.textContent);
-    });
+    if (pagerEl && !pagerEl.dataset.wired) {
+      pagerEl.dataset.wired = '1';
+      pagerEl.querySelector('.sg-prev').onclick = () => { suggestionPage = (suggestionPage - 1 + pages.length) % pages.length; renderPage(); };
+      pagerEl.querySelector('.sg-next').onclick = () => { suggestionPage = (suggestionPage + 1) % pages.length; renderPage(); };
+    }
+    renderPage();
   }
 
 
@@ -341,7 +469,7 @@ function bootChat(customer) {
       if (Array.isArray(history)) {
         for (const m of history) {
           addBubble(m.role, m.content);
-          for (const a of m.meta?.actions ?? []) addActionCard(a);
+          for (const a of m.meta?.actions ?? []) addAction(a);
         }
       }
     } catch { /* fresh conversation */ }
@@ -387,7 +515,7 @@ function bootChat(customer) {
       } else {
         addStatus('No response received. Please try again.', 'error');
       }
-      for (const a of turnData?.actions ?? []) addActionCard(a);
+      for (const a of turnData?.actions ?? []) addAction(a);
       if (turnData?.conversation_id) {
         conversationId = Number(turnData.conversation_id);
         sessionStorage.setItem(`conversation:${customer.id}`, String(conversationId));
@@ -627,9 +755,13 @@ function bootChat(customer) {
     setVoiceStatus('Transcribing…', { cls: 'work' });
     micBtn.classList.add('working');
     try {
-      const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+      // Sarvam STT rejects raw webm/opus (400); transcode to WAV in the browser
+      // first, falling back to the original blob if the browser can't decode it.
+      const wav = await wavFromBlob(blob);
+      const uploadBlob = wav || blob;
+      const ext = wav ? 'wav' : blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
       const form = new FormData();
-      form.append('audio', blob, `speech.${ext}`);
+      form.append('audio', uploadBlob, `speech.${ext}`);
       const res = await fetch('/api/voice/transcribe', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       micBtn.classList.remove('working');

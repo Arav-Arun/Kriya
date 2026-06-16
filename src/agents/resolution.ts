@@ -14,7 +14,7 @@ import {
   setConversationStateTool,
 } from '../services/tools.ts';
 import { POLICY_TOOLS } from '../services/policy-gates.ts';
-import { LIVE_READ_TOOLS, LIVE_ACTION_TOOLS } from '../services/provider-tools.ts';
+import { LIVE_READ_TOOLS, LIVE_ACTION_TOOLS, PRESENTATION_TOOLS } from '../services/provider-tools.ts';
 import { VERIFICATION_TOOLS } from '../services/verify.ts';
 
 const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4.1';
@@ -31,7 +31,7 @@ export default createAgent(() => ({
     getStatementsTool, getDisputesTool, getSubscriptionsTool,
     getEmandatesTool, cancelEmandateTool,
     ...POLICY_TOOLS,
-    ...LIVE_READ_TOOLS, ...LIVE_ACTION_TOOLS, ...VERIFICATION_TOOLS,
+    ...LIVE_READ_TOOLS, ...LIVE_ACTION_TOOLS, ...PRESENTATION_TOOLS, ...VERIFICATION_TOOLS,
     waiveFeeTool, blockCardTool, unblockCardTool, hotlistCardTool,
     toggleInternationalTool, setCardControlTool, setAutopayTool,
     convertToEmiTool, forecloseEmiTool, raiseDisputeTool,

@@ -192,9 +192,12 @@ export async function run(ctx: FlueContext<Payload>) {
         at: a.performed_at,
       }));
 
-    const escalated = actions.some((a) => a.type === 'escalation_created');
-    const rejected = actions.some((a) => String(a.type ?? '').endsWith('_rejected'));
-    const status = escalated ? 'escalated' : rejected ? 'action_rejected' : actions.length > 0 ? 'action_taken' : 'response_ready';
+    // ui_card entries are presentational (a rendered balance/spend/txn card), not
+    // side effects — exclude them when deciding whether real work happened.
+    const sideEffects = actions.filter((a) => a.type !== 'ui_card');
+    const escalated = sideEffects.some((a) => a.type === 'escalation_created');
+    const rejected = sideEffects.some((a) => String(a.type ?? '').endsWith('_rejected'));
+    const status = escalated ? 'escalated' : rejected ? 'action_rejected' : sideEffects.length > 0 ? 'action_taken' : 'response_ready';
 
     const assistantMeta = {
       actions,

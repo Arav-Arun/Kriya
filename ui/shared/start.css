@@ -115,23 +115,6 @@ footer.foot .serif { font-family: var(--serif); }
   margin-top: 8px;
 }
 @media (max-width: 760px) { .api-index { grid-template-columns: 1fr; } }
-@media (min-width: 761px) {
-  .api-index .api-group:last-child {
-    grid-column: span 2;
-  }
-  .api-index .api-group:last-child .api-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 32px;
-  }
-  .api-index .api-group:last-child .api-list li {
-    border-top: 1px solid var(--line);
-  }
-  .api-index .api-group:last-child .api-list li:nth-child(1),
-  .api-index .api-group:last-child .api-list li:nth-child(2) {
-    border-top: 0;
-  }
-}
 
 .api-group {
   background: rgba(255, 253, 249, 0.72);

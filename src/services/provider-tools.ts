@@ -250,6 +250,11 @@ export const getLiveCardDetailsTool = defineTool({
         : Promise.resolve({ ok: false as const, code: 'NOT_FOUND' as const, message: 'No live card on the linked account.', source: 'hyperface' as const })),
 });
 
+async function ensureRewardsAccount(accountId: string): Promise<boolean> {
+  const res = await hyperfaceProvider.createRewardsAccount(accountId);
+  return res.ok;
+}
+
 export const getLiveCashbackTool = defineTool({
   name: 'get_live_cashback',
   description:
@@ -265,10 +270,18 @@ export const getLiveCashbackTool = defineTool({
         startDate: start_date ? String(start_date) : undefined,
         endDate: end_date ? String(end_date) : undefined,
       };
-      const [summary, txns] = await Promise.all([
-        hyperfaceProvider.cashbackSummary(b.accountId, range),
-        hyperfaceProvider.cashbackTransactions(b.accountId, range),
-      ]);
+      let summary = await hyperfaceProvider.cashbackSummary(b.accountId, range);
+      let txns = await hyperfaceProvider.cashbackTransactions(b.accountId, range);
+      const isSummaryPending = !summary.ok && (summary.code === 'PERMISSION_PENDING' || summary.status === 403 || summary.status === 400);
+      const isTxnsPending = !txns.ok && (txns.code === 'PERMISSION_PENDING' || txns.status === 403 || txns.status === 400);
+      if (isSummaryPending || isTxnsPending) {
+        console.log(`[provider-tools] cashback check failed, attempting to auto-create rewards account for ${b.accountId}`);
+        const created = await ensureRewardsAccount(b.accountId);
+        if (created) {
+          summary = await hyperfaceProvider.cashbackSummary(b.accountId, range);
+          txns = await hyperfaceProvider.cashbackTransactions(b.accountId, range);
+        }
+      }
       if (!summary.ok && !txns.ok) return summary;
       return {
         ok: true as const,
@@ -280,6 +293,75 @@ export const getLiveCashbackTool = defineTool({
       };
     }),
 });
+
+export const getLiveRewardsTool = defineTool({
+  name: 'get_live_rewards',
+  description: 'LIVE provider data: reward points summary and points ledger (points earned, redeemed, expiring) for the account. Use for rewards balance, points history, or "how many points do I have" questions.',
+  parameters: Type.Object({ customer_id: Type.Number() }),
+  execute: async ({ customer_id }) =>
+    withBinding(Number(customer_id), async (b) => {
+      let summary = await hyperfaceProvider.rewardsSummary(b.accountId);
+      let ledger = await hyperfaceProvider.rewardsLedger(b.accountId);
+      const isSummaryPending = !summary.ok && (summary.code === 'PERMISSION_PENDING' || summary.status === 403 || summary.status === 400);
+      const isLedgerPending = !ledger.ok && (ledger.code === 'PERMISSION_PENDING' || ledger.status === 403 || ledger.status === 400);
+      if (isSummaryPending || isLedgerPending) {
+        console.log(`[provider-tools] rewards check failed, attempting to auto-create rewards account for ${b.accountId}`);
+        const created = await ensureRewardsAccount(b.accountId);
+        if (created) {
+          summary = await hyperfaceProvider.rewardsSummary(b.accountId);
+          ledger = await hyperfaceProvider.rewardsLedger(b.accountId);
+        }
+      }
+      if (!summary.ok && !ledger.ok) return summary;
+      return {
+        ok: true as const,
+        data: {
+          summary: summary.ok ? summary.data : { unavailable: summary.message },
+          ledger: ledger.ok ? ledger.data : { unavailable: ledger.message },
+        },
+        source: 'hyperface' as const,
+      };
+    }),
+});
+
+export const liveRedeemRewardsTool = defineTool({
+  name: 'live_redeem_rewards',
+  description: 'LIVE action: redeem reward points in the card system of record. SENSITIVE — needs two-factor verification. Ask the customer for confirmation before redeeming.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    points: Type.Number({ description: 'Number of points to redeem' }),
+    description: Type.Optional(Type.String({ description: 'Optional explanation/merchant info' })),
+  }),
+  execute: async ({ customer_id, points, description }) =>
+    gatedAccountAction(Number(customer_id), 'live_redeem_rewards',
+      { points: Number(points), description: description ? String(description) : 'Redemption' },
+      (b) => hyperfaceProvider.debitRewardPoints({
+        accountId: b.accountId,
+        points: Number(points),
+        description: description ? String(description) : 'Redemption',
+      })),
+});
+
+export const createLiveRewardsAccountTool = defineTool({
+  name: 'create_live_rewards_account',
+  description: 'LIVE action: create a rewards account for the customer\'s linked card account in the system of record. Call this if get_live_rewards or get_live_cashback returns a permission/eligibility issue indicating that the rewards functionality needs enablement.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+  }),
+  execute: async ({ customer_id }) => {
+    const cid = Number(customer_id);
+    if (!liveEnabled()) return disabledJson();
+    const customer = await getCustomer(cid);
+    const binding = await resolveLiveBinding(cid);
+    if (!isServableBinding(binding, customer?.phone)) return noBindingJson();
+    const res = await hyperfaceProvider.createRewardsAccount(binding!.accountId);
+    if (res.ok) {
+      return JSON.stringify({ success: true, message: 'Rewards account created successfully.' });
+    }
+    return shape(res, binding);
+  },
+});
+
 
 export const getLiveAccountDetailsTool = defineTool({
   name: 'get_live_account_details',
@@ -445,7 +527,7 @@ async function gatedAccountAction(
   customerId: number,
   action:
     | 'live_refund' | 'live_create_emi' | 'live_foreclose_emi'
-    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit',
+    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit' | 'live_redeem_rewards',
   detail: Record<string, unknown>,
   exec: (b: LiveBinding) => Promise<ProviderResult<unknown>>,
 ): Promise<string> {
@@ -684,9 +766,265 @@ export const liveUnsubscribeBenefitTool = defineTool({
       (b) => hyperfaceProvider.unsubscribeBenefit({ accountId: b.accountId, benefitId: String(benefit_id) })),
 });
 
+// Spend intelligence + generative cards (resolution agent only)
+// These two tools power the web/app copilot's visual, at-a-glance answers. They
+// never invent figures: every value is computed from a LIVE provider read for a
+// phone-matched account, and each logs a `ui_card` action the chat front-end
+// renders as a frosted card. Cards ride the structured action log (the same
+// channel as action cards), NOT the reply text, so text-only surfaces
+// (Telegram, voice) simply never see them — nothing leaks. Scoped to the
+// resolution agent so the parallel investigation agent's internal reads never
+// emit a card.
+
+/** Log a presentational card for the web chat to render. Best-effort: a card
+ *  failing to log must never break the customer's answer. */
+async function logUiCard(customerId: number, card: Record<string, unknown>): Promise<void> {
+  try {
+    await logAction({ customer_id: customerId, action_type: 'ui_card', action_detail: { card } });
+  } catch (err) {
+    console.warn('[provider-tools] ui_card log failed:', String((err as Error)?.message ?? err));
+  }
+}
+
+/** Pull the transaction array out of whatever envelope the provider returns. */
+function txnArray(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  for (const k of ['transactions', 'transactionList', 'content', 'items', 'records', 'data']) {
+    if (Array.isArray(data?.[k])) return data[k];
+  }
+  if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
+  return [];
+}
+
+/**
+ * Map a transaction to a spend category from its MCC (preferred) or, failing
+ * that, keywords in its description. Deliberately compact — a few well-known
+ * MCC ranges plus common Indian merchant keywords cover the bulk of card spend;
+ * anything unrecognised falls to "Other" rather than guessing.
+ */
+function categorizeTxn(mcc?: string | number | null, description?: string | null): string {
+  const code = Number(mcc);
+  if (Number.isFinite(code) && code > 0) {
+    if ([5411, 5422, 5451, 5462, 5499].includes(code)) return 'Groceries';
+    if (code >= 5811 && code <= 5814) return 'Dining';
+    if ([5541, 5542, 5983].includes(code)) return 'Fuel';
+    if ((code >= 3000 && code <= 3299) || code === 4511 || code === 4722) return 'Travel';
+    if ((code >= 3500 && code <= 3999) || code === 7011) return 'Travel';
+    if ([4111, 4121, 4131, 4789, 7512, 7513, 7523].includes(code)) return 'Transport';
+    if ([4812, 4814, 4899, 4900].includes(code)) return 'Bills & Utilities';
+    if ([5815, 5816, 5817, 5818, 7832, 7841, 7922, 7929, 7996, 7998, 7999].includes(code)) return 'Entertainment';
+    if ([5912, 8011, 8021, 8042, 8062, 8099].includes(code)) return 'Health';
+    if ([8211, 8220, 8241, 8244, 8249, 8299].includes(code)) return 'Education';
+    if ([6010, 6011].includes(code)) return 'Cash & ATM';
+    if ([6300, 5960, 6012, 6051, 6211, 6540].includes(code)) return 'Financial';
+    if (code >= 5300 && code <= 5999) return 'Shopping';
+  }
+  const d = String(description ?? '').toLowerCase();
+  if (/uber|ola|rapido|metro|irctc|\bcab\b|taxi/.test(d)) return 'Transport';
+  if (/swiggy|zomato|restaurant|cafe|coffee|pizza|\bfood\b|eatery|dhaba/.test(d)) return 'Dining';
+  if (/amazon|flipkart|myntra|ajio|nykaa|\bstore\b|\bmart\b|retail|\bshop/.test(d)) return 'Shopping';
+  if (/netflix|spotify|prime|hotstar|youtube|sony|\bzee\b|jiocinema|disney/.test(d)) return 'Entertainment';
+  if (/electricity|water|\bgas\b|broadband|recharge|\bjio\b|airtel|\bvi\b|vodafone|bsnl|\bbill\b/.test(d)) return 'Bills & Utilities';
+  if (/petrol|fuel|diesel|hpcl|iocl|bpcl|indian oil|bharat petroleum|shell/.test(d)) return 'Fuel';
+  if (/bigbasket|blinkit|zepto|dmart|grocery|supermarket|kirana|instamart/.test(d)) return 'Groceries';
+  if (/pharma|apollo|medplus|hospital|clinic|chemist|medical|\b1mg\b|netmeds/.test(d)) return 'Health';
+  return 'Other';
+}
+
+interface SpendInsights {
+  total: number;
+  count: number;
+  currency: string;
+  categories: Array<{ label: string; amount: number; pct: number }>;
+  largest: { label: string; amount: number; date?: string | null } | null;
+  unbilled: number | null;
+  window: { from: string; to: string };
+}
+
+/** Aggregate settled debit spend over a window into a category breakdown. */
+async function computeSpendInsights(
+  accountId: string,
+  range: { from: string; to: string },
+): Promise<{ ok: true; insights: SpendInsights } | { ok: false; note?: string }> {
+  const res = await hyperfaceProvider.transactions(accountId, { ...range, count: 100, offset: 0 });
+  if (!res.ok) {
+    return { ok: false, note: res.code === 'PERMISSION_PENDING' ? MSG.PERMISSION_PENDING_NOTE : res.message };
+  }
+  const byCat = new Map<string, number>();
+  let total = 0;
+  let count = 0;
+  let currency = 'INR';
+  let largest: SpendInsights['largest'] = null;
+  for (const t of txnArray(res.data)) {
+    if (String(t?.txnNature ?? '').toUpperCase() === 'CREDIT') continue; // skip refunds/credits
+    const status = String(t?.txnStatus ?? t?.status ?? '').toUpperCase();
+    if (status === 'REVERSED' || status === 'EXPIRED' || status === 'DECLINED') continue;
+    const amt = Math.abs(Number(t?.transactionAmount ?? t?.amount ?? 0) || 0);
+    if (amt <= 0) continue;
+    if (t?.transactionCurrency) currency = String(t.transactionCurrency);
+    const label = categorizeTxn(t?.merchantCategoryCode, t?.description ?? t?.identifiedMerchantName ?? t?.merchantName);
+    byCat.set(label, (byCat.get(label) ?? 0) + amt);
+    total += amt;
+    count += 1;
+    const desc = String(t?.description ?? t?.identifiedMerchantName ?? t?.merchantName ?? 'Transaction').slice(0, 44);
+    if (!largest || amt > largest.amount) largest = { label: desc, amount: Math.round(amt), date: t?.transactionDate ?? t?.postingDate ?? null };
+  }
+  const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  const TOP = 5;
+  const categories = sorted.slice(0, TOP).map(([label, amount]) => ({
+    label, amount: Math.round(amount), pct: total ? Math.round((amount / total) * 100) : 0,
+  }));
+  const otherAmt = sorted.slice(TOP).reduce((s, [, a]) => s + a, 0);
+  if (otherAmt > 0) categories.push({ label: 'Other', amount: Math.round(otherAmt), pct: total ? Math.round((otherAmt / total) * 100) : 0 });
+
+  // Best-effort: the unbilled total is what's building toward the next bill.
+  let unbilled: number | null = null;
+  const ub = await hyperfaceProvider.unbilledTransactions(accountId, { count: 100, offset: 0 });
+  if (ub.ok) {
+    const ubTotal = txnArray(ub.data).reduce((s: number, t: any) => {
+      if (String(t?.txnNature ?? '').toUpperCase() === 'CREDIT') return s;
+      return s + Math.abs(Number(t?.transactionAmount ?? t?.amount ?? 0) || 0);
+    }, 0);
+    if (ubTotal > 0) unbilled = Math.round(ubTotal);
+  }
+
+  return { ok: true, insights: { total: Math.round(total), count, currency, categories, largest, unbilled, window: range } };
+}
+
+/** Best-effort extraction of EMI plan rows from the provider's emiConfig payload. */
+function emiPlans(data: any): Array<{ tenure: number; monthly: number; rate: number | null; fee: number | null }> {
+  const arr = Array.isArray(data) ? data
+    : data?.emiPlans ?? data?.plans ?? data?.tenureOptions ?? data?.emiOptions ?? data?.emiConfigs ?? data?.data?.emiPlans ?? [];
+  if (!Array.isArray(arr)) return [];
+  return arr.map((p: any) => ({
+    tenure: Number(p?.tenure ?? p?.tenureInMonths ?? p?.tenureMonths ?? p?.months ?? 0),
+    monthly: Math.round(Number(p?.emiAmount ?? p?.monthlyInstallment ?? p?.installmentAmount ?? p?.emi ?? 0) || 0),
+    rate: p?.interestRate != null ? Number(p.interestRate) : p?.rateOfInterest != null ? Number(p.rateOfInterest) : null,
+    fee: p?.processingFee != null ? Number(p.processingFee) : null,
+  })).filter((p: any) => p.tenure > 0 && p.monthly > 0).slice(0, 6);
+}
+
+function emiPrincipal(data: any): number | null {
+  const v = data?.principal ?? data?.amount ?? data?.outstandingAmount ?? data?.totalOutstanding ?? data?.transactionAmount;
+  return v != null ? Math.round(Number(v)) : null;
+}
+
+/** Shared "this live read could not be served" shape (matches liveUnavailable in tools.ts). */
+function liveUnavailableJson(feed: string, note?: string): string {
+  return JSON.stringify({
+    source: 'live_unavailable',
+    available: false,
+    feed,
+    reason: note ?? MSG.NO_BINDING,
+    note: `Live ${feed} could not be retrieved from the card system of record. Tell the customer this isn't available from the live system right now — do NOT invent or estimate it.`,
+  });
+}
+
+export const getSpendInsightsTool = defineTool({
+  name: 'get_spend_insights',
+  description:
+    'LIVE provider data: a spending breakdown for the customer over a date window (default the last 30 days) — total spent, number of purchases, the top spending categories with their share of spend, the single largest purchase, and the unbilled amount building toward the next bill. Computed from real settled card transactions (never estimated). Use for "where is my money going / spending summary / how much have I spent / what will my next bill be" questions. On the web/app chat it also renders a visual spend card; state the headline figures in your reply too.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    from: Type.Optional(Type.String({ description: 'Window start yyyy-MM-dd (default 30 days before "to")' })),
+    to: Type.Optional(Type.String({ description: 'Window end yyyy-MM-dd (default today)' })),
+  }),
+  execute: async ({ customer_id, from, to }) => {
+    const cid = Number(customer_id);
+    if (!liveEnabled()) return disabledJson();
+    const customer = await getCustomer(cid);
+    const binding = await resolveLiveBinding(cid);
+    if (!isServableBinding(binding, customer?.phone)) return noBindingJson();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const toDate = to ? new Date(String(to)) : new Date();
+    const fromDate = from ? new Date(String(from)) : new Date(toDate.getTime() - 30 * 86_400_000);
+    const range = { from: fmt(fromDate), to: fmt(toDate) };
+    const result = await computeSpendInsights(binding!.accountId, range);
+    if (!result.ok) return liveUnavailableJson('spend insights', result.note);
+    const { insights } = result;
+    if (insights.count > 0) await logUiCard(cid, { type: 'spend', ...insights });
+    return JSON.stringify({ source: 'live_provider', ...insights });
+  },
+});
+
+export const showCardTool = defineTool({
+  name: 'show_card',
+  description:
+    'Render a clean visual card in the WEB/APP chat for the customer to SEE, and return the same live figures to you. type="balance" (outstanding, available + credit limit, utilisation), "transactions" (recent purchases) or "emi_offer" (EMI plans for the current outstanding). Every value is read live from the card system of record, so only call it for a phone-linked account and only when a visual genuinely helps (a balance check, "show my recent transactions", "what are my EMI options"). On Telegram/voice just answer in text — do not call it there. Always state the key figures in your reply as well; the card supplements the text, it does not replace it.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    type: Type.String({ description: 'balance | transactions | emi_offer' }),
+  }),
+  execute: async ({ customer_id, type }) => {
+    const cid = Number(customer_id);
+    if (!liveEnabled()) return disabledJson();
+    const customer = await getCustomer(cid);
+    const binding = await resolveLiveBinding(cid);
+    if (!isServableBinding(binding, customer?.phone)) return noBindingJson();
+    const accountId = binding!.accountId;
+    const kind = String(type).toLowerCase();
+
+    if (kind === 'balance') {
+      const live = await linkedLiveSummary(cid);
+      if (!live) return liveUnavailableJson('balance and limits');
+      const a = live.account;
+      const outstanding = Math.max(0, -a.currentBalance);
+      const limit = a.approvedCreditLimit ?? null;
+      const card = {
+        type: 'balance' as const,
+        outstanding: Math.round(outstanding),
+        available: a.availableCreditLimit != null ? Math.round(a.availableCreditLimit) : null,
+        limit: limit != null ? Math.round(limit) : null,
+        currency: a.currency ?? 'INR',
+        utilisation: limit ? Math.round((outstanding / limit) * 100) : null,
+        card_last4: (live.primaryCard?.maskedCardNumber ?? '').replace(/\D/g, '').slice(-4) || null,
+        status: live.primaryCard?.isHotlisted ? 'hotlisted'
+          : live.primaryCard?.isLocked ? 'locked'
+          : (String(live.primaryCard?.cardStatus ?? '').toLowerCase() || null),
+      };
+      await logUiCard(cid, card);
+      return JSON.stringify({ source: 'live_provider', shown: 'balance', ...card });
+    }
+
+    if (kind === 'transactions') {
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+      const toD = new Date();
+      const fromD = new Date(toD.getTime() - 89 * 86_400_000);
+      const res = await hyperfaceProvider.transactions(accountId, { from: fmt(fromD), to: fmt(toD), count: 8, offset: 0 });
+      if (!res.ok) return liveUnavailableJson('transactions', res.code === 'PERMISSION_PENDING' ? MSG.PERMISSION_PENDING_NOTE : res.message);
+      const rows = txnArray(res.data).map((t: any) => ({
+        label: String(t?.description ?? t?.identifiedMerchantName ?? t?.merchantName ?? 'Transaction').slice(0, 48),
+        amount: Math.abs(Number(t?.transactionAmount ?? t?.amount ?? 0) || 0),
+        nature: String(t?.txnNature ?? '').toUpperCase() === 'CREDIT' ? 'credit' : 'debit',
+        date: t?.transactionDate ?? t?.postingDate ?? null,
+      })).filter((r: any) => r.amount > 0).slice(0, 8);
+      if (rows.length === 0) return liveUnavailableJson('transactions');
+      const card = { type: 'transactions' as const, currency: 'INR', rows };
+      await logUiCard(cid, card);
+      return JSON.stringify({ source: 'live_provider', shown: 'transactions', count: rows.length, rows });
+    }
+
+    if (kind === 'emi_offer' || kind === 'emi') {
+      const res = await hyperfaceProvider.emiConfig(accountId, { emiType: 'TOTAL_OUTSTANDING' });
+      if (!res.ok) return liveUnavailableJson('EMI offer', res.code === 'PERMISSION_PENDING' ? MSG.PERMISSION_PENDING_NOTE : res.message);
+      const plans = emiPlans(res.data);
+      if (plans.length === 0) {
+        return JSON.stringify({ source: 'live_provider', shown: 'none', note: 'No EMI plans were returned to render — answer the EMI question in text instead.', data: res.data });
+      }
+      const card = { type: 'emi_offer' as const, currency: 'INR', amount: emiPrincipal(res.data), emi_type: 'total_outstanding', plans };
+      await logUiCard(cid, card);
+      return JSON.stringify({ source: 'live_provider', shown: 'emi_offer', amount: card.amount, plans });
+    }
+
+    return JSON.stringify({ success: false, reason: `Unknown card type "${type}". Use balance, transactions, or emi_offer.` });
+  },
+});
+
+export const PRESENTATION_TOOLS = [getSpendInsightsTool, showCardTool];
+
 export const LIVE_READ_TOOLS = [
   getLiveBindingTool, getLiveAccountOverviewTool, getLiveAccountDetailsTool,
-  getLiveUnbilledTool, getLiveCardDetailsTool, getLiveCashbackTool,
+  getLiveUnbilledTool, getLiveCardDetailsTool,
   getLiveEmiOfferTool, inquireLiveTransactionTool,
   getLiveBilledTransactionsTool, getLiveDownloadStatementTool,
   getLiveBenefitsTool, getLiveBenefitsByProgramTool,

@@ -9,6 +9,34 @@ import type { ChannelAdapter, OutboundDelivery } from './types.ts';
 const API_BASE = 'https://api.telegram.org';
 const MAX_LEN = 4000; // Telegram's hard limit is 4096 chars; stay under it.
 
+// Capability overview shown for /start and /help (identified users). Mirrors the
+// full live feature set so Telegram stays consistent with the web copilot.
+export const KRIYA_TELEGRAM_HELP =
+  "**Kriya — your card copilot**\n"
+  + "I work on your real card account, live. Just ask in plain language:\n\n"
+  + "• **Balance & limits** — \"what's my outstanding?\", \"how much credit is left?\"\n"
+  + "• **Spending** — \"where did my money go this month?\" for a category breakdown\n"
+  + "• **Transactions** — \"show my recent transactions\", or ask about one charge\n"
+  + "• **Statements & bills** — \"send my last statement\", \"what's my next bill?\"\n"
+  + "• **EMI** — \"what are my EMI options?\", convert a purchase or your outstanding\n"
+  + "• **Card controls** — block/unblock, and online/contactless/ATM/international toggles\n"
+  + "• **Disputes & refunds** — flag a wrong or duplicate charge\n"
+  + "• **Subscriptions** — list autopays/mandates and cancel one\n\n"
+  + "Lost your card? Just say \"block my card\" — I do it instantly, no questions first.";
+
+// Render assistant markdown as Telegram-safe HTML: escape the markup-significant
+// characters, then re-introduce only the tags Telegram's HTML parse_mode allows
+// (<b>, <i>, <code>). Markdown tables can't render on Telegram, so their pipes
+// just survive as plain text. Bullets are normalised to "• ".
+function toTelegramHtml(s: string): string {
+  let t = String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+  t = t.replace(/^[\t ]*[-•]\s+/gm, '• ');
+  return t;
+}
+
 // In-memory phone <-> chat_id bindings.
 const chatIdByPhone = new Map<string, string>();
 const phoneByChatId = new Map<string, string>();
@@ -183,7 +211,15 @@ class TelegramAdapter implements ChannelAdapter {
     }
     let lastId: string | undefined;
     for (const chunk of splitMessage(text, MAX_LEN)) {
-      const r = await callTelegram('sendMessage', { chat_id: chatId, text: chunk });
+      // Prefer HTML so **bold** and amounts render; if Telegram rejects the
+      // formatted body (rare parse edge case), retry the same chunk as plain text.
+      let r = await callTelegram('sendMessage', {
+        chat_id: chatId,
+        text: toTelegramHtml(chunk),
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
+      if (!r.ok) r = await callTelegram('sendMessage', { chat_id: chatId, text: chunk });
       if (!r.ok) return { ok: false, error: r.error };
       lastId = r.messageId;
     }

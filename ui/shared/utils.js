@@ -51,3 +51,46 @@ export const daysUntil = (dateStr) => {
   if (Number.isNaN(d.getTime())) return null;
   return Math.ceil((d - new Date()) / 86400000);
 };
+
+// Decode a recorded audio blob (webm/opus, mp4/aac, …) and re-encode it as a
+// 16 kHz mono 16-bit WAV — the format Sarvam STT reliably accepts. The browser's
+// MediaRecorder emits webm/opus, which Sarvam rejects with a 400 ("format"), so
+// we transcode in the page before upload. Returns null if the browser can't
+// decode the blob, letting the caller fall back to the original.
+export async function wavFromBlob(blob) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AudioCtx || !OfflineCtx) return null;
+    const ac = new AudioCtx();
+    const decoded = await ac.decodeAudioData(await blob.arrayBuffer());
+    if (ac.close) ac.close();
+    const rate = 16000;
+    const offline = new OfflineCtx(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+    const src = offline.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offline.destination);
+    src.start();
+    const rendered = await offline.startRendering();
+    return encodeWav(rendered.getChannelData(0), rate);
+  } catch {
+    return null;
+  }
+}
+
+function encodeWav(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); writeStr(8, 'WAVE');
+  writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  writeStr(36, 'data'); view.setUint32(40, samples.length * 2, true);
+  let off = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    off += 2;
+  }
+  return new Blob([view], { type: 'audio/wav' });
+}

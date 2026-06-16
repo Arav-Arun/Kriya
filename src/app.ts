@@ -23,7 +23,7 @@ import {
 import { evidenceStorage } from './services/storage.ts';
 import { config, enforceHostedGuardrails, updateTelegramConfig } from './config/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
-import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact } from './channels/telegram.ts';
+import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact, KRIYA_TELEGRAM_HELP } from './channels/telegram.ts';
 import { handleInbound, notifyCustomer, customerIdByPhone, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
 import { hyperfaceProvider } from './providers/hyperface.ts';
 import { linkedLiveSummary } from './services/provider-tools.ts';
@@ -418,7 +418,7 @@ app.post('/api/channels/telegram/webhook', async (c) => {
       .catch((err) => console.error('[telegram] persist contact failed:', err));
     void telegramAdapter.sendText(
       parsed.phone,
-      "Thanks — you're connected. Ask me anything about your card: balance, transactions, EMIs, or blocking your card if it's lost.",
+      "Thanks — you're connected. Ask me anything about your card: balance, spending, transactions, statements, EMIs, or block your card instantly if it's lost. Type /help to see everything I can do.",
     ).catch((err) => console.error('[telegram] welcome failed:', err));
     return c.json({ ok: true });
   }
@@ -426,6 +426,15 @@ app.post('/api/channels/telegram/webhook', async (c) => {
   if (!parsed.identified) {
     // Fire-and-forget (requestContact self-throttles) so the ACK is immediate.
     void requestContact(parsed.chatId).catch((err) => console.error('[telegram] contact prompt failed:', err));
+    return c.json({ ok: true });
+  }
+
+  // /start and /help: answer with the capability overview directly (skip the
+  // agent) so the bot has a crisp, instant command experience.
+  const cmd = parsed.text.trim().toLowerCase();
+  if (cmd === '/start' || cmd === '/help' || cmd === 'help') {
+    void telegramAdapter.sendText(parsed.from, KRIYA_TELEGRAM_HELP)
+      .catch((err) => console.error('[telegram] help reply failed:', err));
     return c.json({ ok: true });
   }
 

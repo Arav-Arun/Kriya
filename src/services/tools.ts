@@ -63,6 +63,20 @@ function liveUnavailable(feed: string, note?: string): string {
 }
 
 /**
+ * The transactions endpoint requires a {from,to} window and caps it at 90 days;
+ * with no window it returns the current cycle only (empty for any account whose
+ * activity predates it). Default to the last 89 days (yyyy-MM-dd, safely under
+ * the cap). When only `to` is given, `from` is 89 days before it, so the agent
+ * can pull an older 90-day slice by passing just an end date.
+ */
+function transactionWindow(from?: string, to?: string): { from: string; to: string } {
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const toDate = to ? new Date(to) : new Date();
+  const fromDate = from ? new Date(from) : new Date(toDate.getTime() - 89 * 86_400_000);
+  return { from: fmt(fromDate), to: fmt(toDate) };
+}
+
+/**
  * Deterministic identity gate for sensitive actions. Returns null when the
  * session is sufficiently verified; otherwise a ready-to-return JSON failure
  * instructing the agent to run the verification flow and retry.
@@ -107,6 +121,13 @@ export const getCustomerProfileTool = defineTool({
     // Identity is always the record on file; figures come from the card
     // system of record when this customer's number is linked to a live account.
     const live = await linkedLiveSummary(c.id);
+    let liveRewards: number | 'unavailable' = 'unavailable';
+    if (live) {
+      const rew = await hyperfaceProvider.rewardsSummary(live.account.id);
+      if (rew.ok) {
+        liveRewards = (rew.data as any).available ?? 0;
+      }
+    }
     const figures = live
       ? {
           source: 'live_provider',
@@ -117,7 +138,7 @@ export const getCustomerProfileTool = defineTool({
           available_limit: live.account.availableCreditLimit,
           outstanding_total: Math.max(0, -live.account.currentBalance),
           currency: live.account.currency ?? 'INR',
-          source_note: 'balance/limits/card status are live from the card system of record; due date, CIBIL, risk, reward points and KYC have no live source and are shown only when on file (else "unavailable")',
+          source_note: 'balance/limits/card status/reward points are live from the card system of record; due date, CIBIL, risk, and KYC have no live source and are shown only when on file (else "unavailable")',
         }
       : {
           // Strict-live: no phone-linked account → account FIGURES are
@@ -142,7 +163,7 @@ export const getCustomerProfileTool = defineTool({
       due_date: orUnavailable(c.due_date),
       cibil_score: orUnavailable(c.cibil_score),
       risk_score: orUnavailable(c.risk_score),
-      reward_points: orUnavailable(c.reward_points_balance),
+      reward_points: live ? liveRewards : orUnavailable(c.reward_points_balance),
       international_enabled: c.international_enabled === 1,
       kyc_status: orUnavailable(c.kyc_status),
       kyc_expiry: orUnavailable(c.kyc_expiry),
@@ -154,22 +175,28 @@ export const getCustomerProfileTool = defineTool({
 export const getTransactionsTool = defineTool({
   name: 'get_transactions',
   description:
-    'Fetch the customer\'s most recent card transactions (newest first). Optionally filter by merchant name. Each row has id, timestamp, merchant, category, amount, currency, channel, location, status, decline_reason.',
+    'Fetch the customer\'s card transactions (newest first). Defaults to the last 90 days; to look further back (e.g. a customer asking about an older charge), pass from/to as yyyy-MM-dd — the window must span at most 90 days. Optionally filter by merchant name. Each row has id, timestamp, merchant, category, amount, currency, channel, location, status, decline_reason.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     merchant: Type.Optional(Type.String()),
+    from: Type.Optional(Type.String({ description: 'Window start yyyy-MM-dd (defaults to 90 days before "to")' })),
+    to: Type.Optional(Type.String({ description: 'Window end yyyy-MM-dd (defaults to today)' })),
     limit: Type.Optional(Type.Number({ description: 'Max rows, default 30, max 100' })),
   }),
-  execute: async ({ customer_id, merchant, limit }) => {
+  execute: async ({ customer_id, merchant, from, to, limit }) => {
     const cid = Number(customer_id);
-    // Live feed is the primary source for phone-linked customers; merchant
-    // filtering stays client-side on records when the live feed serves it.
+    // The provider returns NOTHING without a date window (it falls back to the
+    // current cycle, which is empty for any account whose activity predates it),
+    // so always send one. Default to the last ~90 days — the widest span the
+    // transactions endpoint accepts in a single call.
+    const window = transactionWindow(from, to);
     const live = await tryLinkedRead(cid, (b) => hyperfaceProvider.transactions(b.accountId, {
+      ...window,
       count: limit ? Number(limit) : 30,
       offset: 0,
     }));
     if (live.live) {
-      return JSON.stringify({ source: 'live_provider', transactions: live.data });
+      return JSON.stringify({ source: 'live_provider', window, transactions: live.data });
     }
     return liveUnavailable('transactions', live.note);
   },
