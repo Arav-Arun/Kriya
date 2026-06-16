@@ -40,19 +40,50 @@ export interface LiveCustomerMatch {
   accounts: LiveAccountRef[];
 }
 
-/** GET /accounts/{id}/summary — the richest read we have live today. */
+/** GET /accounts/{id}/summary */
 export interface LiveAccountSummary {
+  primaryCard?: {
+    id: string;
+    accountId?: string;
+    customerId?: string;
+    cardDisplayName?: string;
+    maskedCardNumber?: string;
+    cardExpiry?: string;
+    programId?: string;
+    physicallyIssued?: boolean;
+    virtuallyIssued?: boolean;
+    isPrimary?: boolean;
+    isActivated?: boolean;
+    isHotlisted?: boolean;
+    isLocked?: boolean;
+    cardStatus?: 'ACTIVE' | 'INACTIVE';
+    isPhysicalCardActivated?: boolean;
+    isVirtualCardActivated?: boolean;
+    cardType?: 'Physical' | 'Virtual' | 'VirtualUpgradeToPhysical' | 'Phygital';
+    cardNetwork?: string;
+    cardControls?: unknown[];
+    [k: string]: unknown;
+  };
   account: {
     id: string;
-    type?: string;
+    type?: 'CreditAccount' | 'PrepaidAccount';
     currentBalance: number;
-    approvedCreditLimit: number;
-    availableCreditLimit: number;
+    approvedCreditLimit?: number;
+    availableCreditLimit?: number;
     approvedCashLimit?: number;
     availableCashLimit?: number;
     currency?: string;
+    customerId?: string;
+    programId?: string;
+    currentCycleStartDate?: string;
+    currentCycleEndDate?: string;
+    status?: 'ACTIVE' | 'CHARGE_OFF' | 'PENDING_CLOSURE' | 'CLOSED' | 'DORMANT' | 'SUSPENDED' | 'TRANSFERRED' | 'FORCED_SUSPENDED';
+    dateCreated?: string;
+    currentMonthLoadAmount?: string;
+    totalMonthlyDebitAmount?: string;
+    totalAmountLoadForFinancialYear?: string;
     customer?: {
-      id: string;
+      id?: string;
       firstName?: string | null;
       lastName?: string | null;
       emailAddress?: string | null;
@@ -61,19 +92,70 @@ export interface LiveAccountSummary {
     };
     [k: string]: unknown;
   };
-  primaryCard?: {
-    id: string;
-    accountId?: string;
-    customerId?: string;
-    maskedCardNumber?: string;
-    cardExpiry?: string;
-    cardStatus?: string;
-    isLocked?: boolean;
-    isHotlisted?: boolean;
-    isActivated?: boolean;
-    cardNetwork?: string;
+  latestTransactions?: Array<{
+    id?: string;
+    extTxnRefId?: string;
+    amount?: number;
+    description?: string;
+    transactionAmount?: number;
+    transactionCurrency?: string | null;
+    openingBalance?: number;
+    closingBalance?: number;
+    txnType?: string;
+    postedToLedger?: boolean;
+    merchantCategoryCode?: string | null;
+    mid?: string | null;
+    tid?: string | null;
+    identifiedMerchantLogo?: string | null;
+    transactionDate?: string;
+    postingDate?: string;
+    txnNature?: 'CREDIT' | 'DEBIT';
+    txnSource?: 'CUSTOMER_INITIATED' | 'SYSTEM_GENERATED';
+    txnStatus?: 'SETTLED' | 'APPROVED' | 'REVERSED' | 'EXPIRED' | 'PARTIALLY_SETTLED';
+    cardLastFour?: string;
+    txnReferenceNumber?: string;
+    emiAllowed?: boolean;
+    emiRefId?: string | null;
+    emiStatus?: string | null;
+    paymentMode?: string | null;
+    [k: string]: unknown;
+  }>;
+  latestStatement?: {
+    id?: string;
+    billingCycle?: number;
+    fromDate?: string;
+    toDate?: string;
+    openingBalance?: unknown;
+    closingBalance?: unknown;
+    totalAmountDue?: number;
+    minimumAmountDue?: number;
+    initialMAD?: number;
+    initialTAD?: number;
+    dueDate?: string;
+    graceDate?: string;
+    lateFeeIncurred?: number;
+    taxOnLateFeeIncurred?: number;
+    balanceAmountDue?: number;
+    balanceAmountDueGrouped?: unknown;
+    payments?: number;
+    refundsAndCredits?: number;
+    purchasesAndDebits?: number;
+    fees?: number;
+    financeCharges?: number;
+    taxes?: number;
+    cashback?: number;
+    emi?: number;
     [k: string]: unknown;
   };
+  offers?: unknown[];
+  customerFkycDetail?: {
+    id?: string;
+    kycStatus?: 'smallKYC' | 'FKYC';
+    fkycStatus?: 'NOT_INITIATED' | 'PENDING' | 'REJECTED' | 'COMPLETED';
+    fkycMethod?: 'CKYC' | 'VKYC';
+    [k: string]: unknown;
+  };
+  showVirtualCard?: boolean;
   [k: string]: unknown;
 }
 
@@ -122,8 +204,8 @@ export interface CardProvider {
 
   // ── Customer ─────────────────────────────────────────────────────────────
   createCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  fetchCustomer(customerId: string): Promise<ProviderResult<unknown>>;
-  updateCustomer(customerId: string, input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
+  fetchCustomer(custId: string): Promise<ProviderResult<unknown>>;
+  updateCustomer(custId: string, input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   /** Match a customer by registered mobile / PAN (live-verified 2026-06-12). */
   lookupCustomer(q: { mobileNumber?: string; pan?: string; programId?: string }): Promise<ProviderResult<LiveCustomerMatch[]>>;
   createIssuerCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
@@ -169,7 +251,7 @@ export interface CardProvider {
   creditTransaction(input: { accountId: string; amount: number; creditTransactionType: string; description: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Nudges ───────────────────────────────────────────────────────────────
-  nudges(accountId: string): Promise<ProviderResult<unknown>>;
+  nudges(accountId: string, opts?: { channel?: string; count?: number }): Promise<ProviderResult<unknown>>;
 
   // ── EMI ──────────────────────────────────────────────────────────────────
   emiConfig(accountId: string, q?: { amount?: number; txnRefId?: string; emiType?: 'TOTAL_OUTSTANDING' | 'LAST_BILLED_OUTSTANDING' }): Promise<ProviderResult<unknown>>;
@@ -205,8 +287,4 @@ export interface CardProvider {
   webhookResume(input: { subscriptionId?: string; scope?: string; scopeId?: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   webhookFetchSubscriptions(q: { scope: string; scopeId: string }): Promise<ProviderResult<unknown>>;
 
-  // ── Aux ───────────────────────────────────────────────────────────────────
-  /** Read the status of a card repayment by provider id or external ref.
-   *  documented, unverified — path/shape inferred from the spec. */
-  paymentStatus(q: { accountId: string; paymentId?: string; extRefId?: string }): Promise<ProviderResult<unknown>>;
 }

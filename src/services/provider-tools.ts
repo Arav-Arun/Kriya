@@ -756,22 +756,6 @@ export const getLiveForeclosureDetailsTool = defineTool({
     })),
 });
 
-export const getLivePaymentStatusTool = defineTool({
-  name: 'get_live_payment_status',
-  description:
-    'LIVE provider data: the status of a card repayment — whether a payment was received, credited, or is still pending. Use for "did my payment go through" or "when will my payment reflect" questions.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    payment_id: Type.Optional(Type.String({ description: 'Provider payment id' })),
-    external_ref_id: Type.Optional(Type.String({ description: 'External reference id' })),
-  }),
-  execute: async ({ customer_id, payment_id, external_ref_id }) =>
-    withBinding(Number(customer_id), (b) => hyperfaceProvider.paymentStatus({
-      accountId: b.accountId,
-      paymentId: payment_id ? String(payment_id) : undefined,
-      extRefId: external_ref_id ? String(external_ref_id) : undefined,
-    })),
-});
 
 export const getLiveCustomerDetailsTool = defineTool({
   name: 'get_live_customer_details',
@@ -864,7 +848,7 @@ export const LIVE_READ_TOOLS = [
   getLiveBilledTransactionsTool, getLiveDownloadStatementTool,
   getLiveBenefitsTool, getLiveBenefitsByProgramTool,
   getLiveEmiListTool, getLiveForeclosureDetailsTool,
-  getLivePaymentStatusTool, getLiveCustomerDetailsTool,
+  getLiveCustomerDetailsTool,
 ];
 
 export const LIVE_ACTION_TOOLS = [
