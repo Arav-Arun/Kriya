@@ -66,7 +66,7 @@ export const HIGH_RISK_ACTIONS = new Set([
   // Live provider writes (system of record).
   'live_unlock_card', 'live_hotlist_card',
   'live_replace_card', 'live_refund', 'live_create_emi', 'live_foreclose_emi',
-  'live_subscribe_benefit', 'live_unsubscribe_benefit', 'live_redeem_rewards',
+  'live_subscribe_benefit', 'live_unsubscribe_benefit',
 ]);
 
 export interface VerificationStatus {

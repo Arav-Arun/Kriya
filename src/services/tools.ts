@@ -121,13 +121,6 @@ export const getCustomerProfileTool = defineTool({
     // Identity is always the record on file; figures come from the card
     // system of record when this customer's number is linked to a live account.
     const live = await linkedLiveSummary(c.id);
-    let liveRewards: number | 'unavailable' = 'unavailable';
-    if (live) {
-      const rew = await hyperfaceProvider.rewardsSummary(live.account.id);
-      if (rew.ok) {
-        liveRewards = (rew.data as any).available ?? 0;
-      }
-    }
     const figures = live
       ? {
           source: 'live_provider',
@@ -138,7 +131,7 @@ export const getCustomerProfileTool = defineTool({
           available_limit: live.account.availableCreditLimit,
           outstanding_total: Math.max(0, -live.account.currentBalance),
           currency: live.account.currency ?? 'INR',
-          source_note: 'balance/limits/card status/reward points are live from the card system of record; due date, CIBIL, risk, and KYC have no live source and are shown only when on file (else "unavailable")',
+          source_note: 'balance/limits/card status are live from the card system of record; due date, CIBIL, risk, reward points and KYC have no live source and are shown only when on file (else "unavailable")',
         }
       : {
           // Strict-live: no phone-linked account → account FIGURES are
@@ -163,7 +156,7 @@ export const getCustomerProfileTool = defineTool({
       due_date: orUnavailable(c.due_date),
       cibil_score: orUnavailable(c.cibil_score),
       risk_score: orUnavailable(c.risk_score),
-      reward_points: live ? liveRewards : orUnavailable(c.reward_points_balance),
+      reward_points: orUnavailable(c.reward_points_balance),
       international_enabled: c.international_enabled === 1,
       kyc_status: orUnavailable(c.kyc_status),
       kyc_expiry: orUnavailable(c.kyc_expiry),

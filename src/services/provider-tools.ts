@@ -250,11 +250,6 @@ export const getLiveCardDetailsTool = defineTool({
         : Promise.resolve({ ok: false as const, code: 'NOT_FOUND' as const, message: 'No live card on the linked account.', source: 'hyperface' as const })),
 });
 
-async function ensureRewardsAccount(accountId: string): Promise<boolean> {
-  const res = await hyperfaceProvider.createRewardsAccount(accountId);
-  return res.ok;
-}
-
 export const getLiveCashbackTool = defineTool({
   name: 'get_live_cashback',
   description:
@@ -270,18 +265,10 @@ export const getLiveCashbackTool = defineTool({
         startDate: start_date ? String(start_date) : undefined,
         endDate: end_date ? String(end_date) : undefined,
       };
-      let summary = await hyperfaceProvider.cashbackSummary(b.accountId, range);
-      let txns = await hyperfaceProvider.cashbackTransactions(b.accountId, range);
-      const isSummaryPending = !summary.ok && (summary.code === 'PERMISSION_PENDING' || summary.status === 403 || summary.status === 400);
-      const isTxnsPending = !txns.ok && (txns.code === 'PERMISSION_PENDING' || txns.status === 403 || txns.status === 400);
-      if (isSummaryPending || isTxnsPending) {
-        console.log(`[provider-tools] cashback check failed, attempting to auto-create rewards account for ${b.accountId}`);
-        const created = await ensureRewardsAccount(b.accountId);
-        if (created) {
-          summary = await hyperfaceProvider.cashbackSummary(b.accountId, range);
-          txns = await hyperfaceProvider.cashbackTransactions(b.accountId, range);
-        }
-      }
+      const [summary, txns] = await Promise.all([
+        hyperfaceProvider.cashbackSummary(b.accountId, range),
+        hyperfaceProvider.cashbackTransactions(b.accountId, range),
+      ]);
       if (!summary.ok && !txns.ok) return summary;
       return {
         ok: true as const,
@@ -293,75 +280,6 @@ export const getLiveCashbackTool = defineTool({
       };
     }),
 });
-
-export const getLiveRewardsTool = defineTool({
-  name: 'get_live_rewards',
-  description: 'LIVE provider data: reward points summary and points ledger (points earned, redeemed, expiring) for the account. Use for rewards balance, points history, or "how many points do I have" questions.',
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) =>
-    withBinding(Number(customer_id), async (b) => {
-      let summary = await hyperfaceProvider.rewardsSummary(b.accountId);
-      let ledger = await hyperfaceProvider.rewardsLedger(b.accountId);
-      const isSummaryPending = !summary.ok && (summary.code === 'PERMISSION_PENDING' || summary.status === 403 || summary.status === 400);
-      const isLedgerPending = !ledger.ok && (ledger.code === 'PERMISSION_PENDING' || ledger.status === 403 || ledger.status === 400);
-      if (isSummaryPending || isLedgerPending) {
-        console.log(`[provider-tools] rewards check failed, attempting to auto-create rewards account for ${b.accountId}`);
-        const created = await ensureRewardsAccount(b.accountId);
-        if (created) {
-          summary = await hyperfaceProvider.rewardsSummary(b.accountId);
-          ledger = await hyperfaceProvider.rewardsLedger(b.accountId);
-        }
-      }
-      if (!summary.ok && !ledger.ok) return summary;
-      return {
-        ok: true as const,
-        data: {
-          summary: summary.ok ? summary.data : { unavailable: summary.message },
-          ledger: ledger.ok ? ledger.data : { unavailable: ledger.message },
-        },
-        source: 'hyperface' as const,
-      };
-    }),
-});
-
-export const liveRedeemRewardsTool = defineTool({
-  name: 'live_redeem_rewards',
-  description: 'LIVE action: redeem reward points in the card system of record. SENSITIVE — needs two-factor verification. Ask the customer for confirmation before redeeming.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    points: Type.Number({ description: 'Number of points to redeem' }),
-    description: Type.Optional(Type.String({ description: 'Optional explanation/merchant info' })),
-  }),
-  execute: async ({ customer_id, points, description }) =>
-    gatedAccountAction(Number(customer_id), 'live_redeem_rewards',
-      { points: Number(points), description: description ? String(description) : 'Redemption' },
-      (b) => hyperfaceProvider.debitRewardPoints({
-        accountId: b.accountId,
-        points: Number(points),
-        description: description ? String(description) : 'Redemption',
-      })),
-});
-
-export const createLiveRewardsAccountTool = defineTool({
-  name: 'create_live_rewards_account',
-  description: 'LIVE action: create a rewards account for the customer\'s linked card account in the system of record. Call this if get_live_rewards or get_live_cashback returns a permission/eligibility issue indicating that the rewards functionality needs enablement.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-  }),
-  execute: async ({ customer_id }) => {
-    const cid = Number(customer_id);
-    if (!liveEnabled()) return disabledJson();
-    const customer = await getCustomer(cid);
-    const binding = await resolveLiveBinding(cid);
-    if (!isServableBinding(binding, customer?.phone)) return noBindingJson();
-    const res = await hyperfaceProvider.createRewardsAccount(binding!.accountId);
-    if (res.ok) {
-      return JSON.stringify({ success: true, message: 'Rewards account created successfully.' });
-    }
-    return shape(res, binding);
-  },
-});
-
 
 export const getLiveAccountDetailsTool = defineTool({
   name: 'get_live_account_details',
@@ -527,7 +445,7 @@ async function gatedAccountAction(
   customerId: number,
   action:
     | 'live_refund' | 'live_create_emi' | 'live_foreclose_emi'
-    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit' | 'live_redeem_rewards',
+    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit',
   detail: Record<string, unknown>,
   exec: (b: LiveBinding) => Promise<ProviderResult<unknown>>,
 ): Promise<string> {
@@ -1024,7 +942,7 @@ export const PRESENTATION_TOOLS = [getSpendInsightsTool, showCardTool];
 
 export const LIVE_READ_TOOLS = [
   getLiveBindingTool, getLiveAccountOverviewTool, getLiveAccountDetailsTool,
-  getLiveUnbilledTool, getLiveCardDetailsTool,
+  getLiveUnbilledTool, getLiveCardDetailsTool, getLiveCashbackTool,
   getLiveEmiOfferTool, inquireLiveTransactionTool,
   getLiveBilledTransactionsTool, getLiveDownloadStatementTool,
   getLiveBenefitsTool, getLiveBenefitsByProgramTool,

@@ -264,7 +264,6 @@ export interface CardProvider {
   unsubscribeBenefit(input: { accountId: string; benefitId: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Rewards ──────────────────────────────────────────────────────────────
-  createRewardsAccount(accountId: string, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   rewardsSummary(accountId: string): Promise<ProviderResult<unknown>>;
   rewardsLedger(accountId: string): Promise<ProviderResult<unknown>>;
   creditRewardPoints(input: { accountId: string; points: number; description?: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;

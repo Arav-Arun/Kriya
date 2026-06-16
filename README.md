@@ -66,7 +66,7 @@ src/
    SARVAM_API_KEY=your-sarvam-key
    KRIYA_PROVIDER_MODE=hyperface_uat
    HYPERFACE_SECRET_KEY=your-hyperface-access-secret
-   # Issuer master key — used for issuer customer-details API operations
+   # Issuer master key — used ONLY for the issuer customer-details API
    HYPERFACE_ISSUER_SECRET_KEY=your-issuer-master-key
    ```
 3. Start the dev server:

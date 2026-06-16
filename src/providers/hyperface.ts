@@ -216,18 +216,17 @@ export const hyperfaceProvider: CardProvider = {
   unsubscribeBenefit: (input, o) => call('/benefits/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
   // Rewards endpoints
-  createRewardsAccount: (accountId, o) => call('/smartBenefit/rewards/createRewardsAccount', { method: 'POST', body: { accountId }, idempotencyKey: idem(o), apiKey: config.hyperface.issuerSecretKey }),
-  rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId }, apiKey: config.hyperface.issuerSecretKey }),
-  rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId }, apiKey: config.hyperface.issuerSecretKey }),
-  creditRewardPoints: (input, o) => call('/rewards/credit', { method: 'POST', body: input, idempotencyKey: idem(o), apiKey: config.hyperface.issuerSecretKey }),
-  debitRewardPoints: (input, o) => call('/rewards/debit', { method: 'POST', body: input, idempotencyKey: idem(o), apiKey: config.hyperface.issuerSecretKey }),
-  expiringRewards: (input) => call('/rewards/fetchExpiringRewardTransactions', { method: 'POST', body: input, apiKey: config.hyperface.issuerSecretKey }),
-  rewardAccount: (input) => call('/rewards/accountDetails', { method: 'POST', body: input, apiKey: config.hyperface.issuerSecretKey }),
-  rewardTransactions: (input) => call('/rewards/fetchRewardTransactions', { method: 'POST', body: input, apiKey: config.hyperface.issuerSecretKey }),
+  rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId } }),
+  rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId } }),
+  creditRewardPoints: (input, o) => call('/rewards/credit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
+  debitRewardPoints: (input, o) => call('/rewards/debit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
+  expiringRewards: (input) => call('/rewards/fetchExpiringRewardTransactions', { method: 'POST', body: input }),
+  rewardAccount: (input) => call('/rewards/accountDetails', { method: 'POST', body: input }),
+  rewardTransactions: (input) => call('/rewards/fetchRewardTransactions', { method: 'POST', body: input }),
 
   // Cashback endpoints
-  cashbackSummary: (accountId, range) => call('/cashback/summary/fetch', { method: 'POST', body: { accountId, ...range }, apiKey: config.hyperface.issuerSecretKey }),
-  cashbackTransactions: (accountId, range) => call('/cashback/transactions/fetch', { method: 'POST', body: { accountId, ...range }, apiKey: config.hyperface.issuerSecretKey }),
+  cashbackSummary: (accountId, range) => call('/cashback/summary/fetch', { method: 'POST', body: { accountId, ...range } }),
+  cashbackTransactions: (accountId, range) => call('/cashback/transactions/fetch', { method: 'POST', body: { accountId, ...range } }),
 
   // Webhooks endpoints
   webhookSubscribe: (input, o) => call('/event/webhook/subscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
