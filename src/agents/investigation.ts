@@ -8,7 +8,7 @@ import {
 } from '../services/tools.ts';
 import { LIVE_READ_TOOLS } from '../services/provider-tools.ts';
 
-const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4o-mini';
+const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4.1';
 
 export default createAgent(() => ({
   name: 'sentinel-investigation',

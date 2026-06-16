@@ -67,7 +67,7 @@ const EVIDENCE_BRIEF = `Extract the dispute-relevant facts: merchant names, amou
 async function modelRead(input: object[]): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
-  const model = (process.env.SENTINEL_MODEL ?? 'openai/gpt-4o-mini').replace(/^openai\//, '');
+  const model = (process.env.SENTINEL_MODEL ?? 'openai/gpt-4.1').replace(/^openai\//, '');
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },

@@ -206,11 +206,11 @@ function bootChat(customer) {
 
     const chips = [
       'Check my outstanding balance',
-      'View my recent transactions',
+      'What is my available credit limit?',
+      'Is my card active or blocked?',
       'I want to increase my credit limit',
       'Block my card',
-      'Check active EMI plans',
-      'Convert a purchase to EMI',
+      'Help me dispute a wrong charge',
     ];
 
     suggestionsEl.innerHTML = chips

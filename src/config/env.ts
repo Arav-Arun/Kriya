@@ -22,7 +22,7 @@ export interface KriyaConfig {
   sarvamApiKey: string | undefined;
   sarvamSttModel: string;
   sarvamTtsModel: string;
-  /** Resolved agent LLM id (e.g. "openai/gpt-4o-mini"); Flue reads the matching
+  /** Resolved agent LLM id (e.g. "openai/gpt-4.1"); Flue reads the matching
    *  provider key (OPENAI_API_KEY) from the environment when it runs the model. */
   sentinelModel: string;
   appBaseUrl: string;
@@ -99,7 +99,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
     sarvamApiKey,
     sarvamSttModel: env.SARVAM_STT_MODEL || 'saarika:v2.5',
     sarvamTtsModel: env.SARVAM_TTS_MODEL || 'bulbul:v2',
-    sentinelModel: env.SENTINEL_MODEL || 'openai/gpt-4o-mini',
+    sentinelModel: env.SENTINEL_MODEL || 'openai/gpt-4.1',
     appBaseUrl: env.APP_BASE_URL || `http://127.0.0.1:${port}`,
     demoPhone: env.DEMO_PHONE || undefined,
     webhookSigningSecret: env.WEBHOOK_SIGNING_SECRET || undefined,

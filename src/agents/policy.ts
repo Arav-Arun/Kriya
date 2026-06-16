@@ -2,7 +2,7 @@ import { createAgent } from '@flue/runtime';
 import { POLICY_PROMPT } from '../services/prompts.ts';
 import { searchPolicyTool } from '../services/tools.ts';
 
-const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4o-mini';
+const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4.1';
 
 export default createAgent(() => ({
   name: 'sentinel-policy',
