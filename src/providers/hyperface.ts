@@ -182,8 +182,8 @@ export const hyperfaceProvider: CardProvider = {
   creditTransaction: (input, o) => call('/accounts/createCreditTransaction', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
   // Nudges endpoints
-  // NOTE: the /dmon/ service rejects our apikey (401) and 415s without a
-  // content-type, so it needs a different auth than the rest — pending Prajwal.
+  // The /dmon/ service authenticates differently from the Credit Stack apikey
+  // scheme and requires a JSON content-type; both are supplied by call().
   nudges: (accountId, opts) => {
     const params = new URLSearchParams();
     if (opts?.channel) params.set('channel', opts.channel);

@@ -11,7 +11,7 @@ Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card p
 3. **RBI-Compliant Mandate & Dispute Lifecycles**: Fully models RBI e-mandate guidelines (cancellations, limits, pre-debit notifications) and structured dispute tracking.
 4. **Bilingual Voice Copilot**: Streams speech-to-text and text-to-speech feedback in English, Hindi, and Hinglish via Sarvam AI.
 5. **Cross-Channel Consistency**: Syncs customer context across Web Chat and Telegram (`t.me/kriya_copilot_bot`) channels.
-6. **Strict-Live Honesty**: Gracefully falls back to local database files when API endpoints are pending bank enablement (403), displaying clear, transparent notices instead of hallucinating values.
+6. **Strict-Live Honesty**: Customer account data is sourced only from the Hyperface system of record. When a feed is pending bank-side enablement (403) or otherwise unavailable, the affected figures are reported as an explicit "unavailable" with the reason — never substituting local records or placeholder values as the customer's real data.
 
 ---
 

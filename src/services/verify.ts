@@ -64,10 +64,9 @@ export const HIGH_RISK_ACTIONS = new Set([
   'cancel_subscription', 'cancel_emandate', 'set_autopay',
   'toggle_international',
   // Live provider writes (system of record).
-  'live_unlock_card', 'live_hotlist_card', 'live_set_card_controls',
+  'live_unlock_card', 'live_hotlist_card',
   'live_replace_card', 'live_refund', 'live_create_emi', 'live_foreclose_emi',
   'live_subscribe_benefit', 'live_unsubscribe_benefit',
-  'live_credit_rewards', 'live_debit_rewards',
 ]);
 
 export interface VerificationStatus {

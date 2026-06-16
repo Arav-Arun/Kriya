@@ -45,12 +45,12 @@ const DISPUTE_RESOLUTION_SLA = '30-45 days';
 const SOURCE_RECORDS_ON_FILE = 'records_on_file';
 
 /**
- * Strict-live policy (Arav, 2026-06-15): customer account DATA comes ONLY from
- * the Hyperface system of record. When a live read is unavailable — no
- * phone-linked account, the provider feed isn't entitled/enabled (403), or the
- * provider is down — return an explicit "unavailable" and NEVER fall back to a
- * records-on-file snapshot dressed up as the customer's real data. `note`
- * carries the live reason (PERMISSION_PENDING / provider message) when known.
+ * Strict-live policy: customer account data comes only from the Hyperface
+ * system of record. When a live read is unavailable — no phone-linked account,
+ * the provider feed is not enabled (403), or the provider is down — return an
+ * explicit "unavailable" rather than a records-on-file snapshot presented as
+ * the customer's real data. `note` carries the live reason
+ * (PERMISSION_PENDING / provider message) when known.
  */
 function liveUnavailable(feed: string, note?: string): string {
   return JSON.stringify({

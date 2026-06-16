@@ -299,17 +299,6 @@ export const getLiveUnbilledTool = defineTool({
     withBinding(Number(customer_id), (b) => hyperfaceProvider.unbilledTransactions(b.accountId)),
 });
 
-export const getLiveCardControlsTool = defineTool({
-  name: 'get_live_card_controls',
-  description:
-    'LIVE provider data: the current card-control state in the system of record — which usage channels (online/POS/contactless/ATM/international) are enabled and their per-channel limits. Read this before changing controls so you report and toggle from real state.',
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) =>
-    withBinding(Number(customer_id), (b) =>
-      b.cardId ? hyperfaceProvider.cardControls(b.cardId)
-        : Promise.resolve({ ok: false as const, code: 'NOT_FOUND' as const, message: 'No live card on the linked account.', source: 'hyperface' as const })),
-});
-
 export const getLiveEmiOfferTool = defineTool({
   name: 'get_live_emi_offer',
   description:
@@ -326,15 +315,6 @@ export const getLiveEmiOfferTool = defineTool({
       txnRefId: txn_ref_id ? String(txn_ref_id) : undefined,
       emiType: emi_type === 'TOTAL_OUTSTANDING' || emi_type === 'LAST_BILLED_OUTSTANDING' ? emi_type : undefined,
     })),
-});
-
-export const getLiveRewardsLedgerTool = defineTool({
-  name: 'get_live_rewards_ledger',
-  description:
-    'LIVE provider data: the reward-points ledger — per-entry earn/redeem/expiry lines behind the balance. Use for "why didn\'t I get points for this transaction / where did my points go" questions.',
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) =>
-    withBinding(Number(customer_id), (b) => hyperfaceProvider.rewardsLedger(b.accountId)),
 });
 
 export const inquireLiveTransactionTool = defineTool({
@@ -357,7 +337,7 @@ export const inquireLiveTransactionTool = defineTool({
 
 type LiveCardActionType =
   | 'live_lock_card' | 'live_unlock_card' | 'live_hotlist_card'
-  | 'live_replace_card' | 'live_set_card_controls';
+  | 'live_replace_card';
 
 async function gatedCardAction(
   customerId: number,
@@ -459,75 +439,13 @@ export const liveReplaceCardTool = defineTool({
       (cardId) => hyperfaceProvider.replaceCard(cardId)),
 });
 
-// Card-control channels the provider exposes. One schema per channel: an
-// optional `enabled` toggle and an optional per-channel spend limit (INR).
-const CARD_CONTROL_CHANNELS = ['online', 'pos', 'contactless', 'atm', 'international'] as const;
-type CardControlChannel = (typeof CARD_CONTROL_CHANNELS)[number];
-
-const CardControlChannelSchema = Type.Object({
-  enabled: Type.Optional(Type.Boolean({ description: 'Whether this channel is allowed' })),
-  limit: Type.Optional(Type.Number({ description: 'Per-channel spend limit in INR' })),
-});
-
-const CardControlsSchema = Type.Object({
-  online: Type.Optional(CardControlChannelSchema),
-  pos: Type.Optional(CardControlChannelSchema),
-  contactless: Type.Optional(CardControlChannelSchema),
-  atm: Type.Optional(CardControlChannelSchema),
-  international: Type.Optional(CardControlChannelSchema),
-}, { description: 'Card-controls by channel, e.g. { "online": { "enabled": true }, "international": { "enabled": false, "limit": 50000 } }' });
-
-interface NormalizedChannelControl {
-  enabled?: boolean;
-  limit?: number;
-}
-
-/**
- * Reduce caller input to a known, typed subset: only recognized channels, and
- * within each only `enabled` (boolean) and `limit` (finite number). This is
- * both what we send to the provider and what we log — never raw caller input.
- */
-function normalizeCardControls(input: unknown): Record<string, NormalizedChannelControl> {
-  const out: Record<string, NormalizedChannelControl> = {};
-  if (!input || typeof input !== 'object') return out;
-  const src = input as Record<string, unknown>;
-  for (const channel of CARD_CONTROL_CHANNELS) {
-    const raw = src[channel];
-    if (!raw || typeof raw !== 'object') continue;
-    const c = raw as Record<string, unknown>;
-    const normalized: NormalizedChannelControl = {};
-    if (typeof c.enabled === 'boolean') normalized.enabled = c.enabled;
-    if (typeof c.limit === 'number' && Number.isFinite(c.limit)) normalized.limit = c.limit;
-    if (Object.keys(normalized).length > 0) out[channel as CardControlChannel] = normalized;
-  }
-  return out;
-}
-
-export const liveSetCardControlsTool = defineTool({
-  name: 'live_set_card_controls',
-  description:
-    'LIVE action: set card usage controls in the card system of record — enable/disable channels (online, POS, contactless, ATM, international) and per-channel limits. SENSITIVE — needs two-factor verification. Read get_live_card_controls first so you only change what the customer asked for.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    controls: CardControlsSchema,
-    reason: Type.String(),
-  }),
-  execute: async ({ customer_id, controls, reason }) => {
-    const normalized = normalizeCardControls(controls);
-    return gatedCardAction(Number(customer_id), 'live_set_card_controls', String(reason),
-      (cardId) => hyperfaceProvider.setCardControls(cardId, normalized),
-      { controls: normalized });
-  },
-});
-
 // Account-scoped writes (money movement + EMI)
 
 async function gatedAccountAction(
   customerId: number,
   action:
     | 'live_refund' | 'live_create_emi' | 'live_foreclose_emi'
-    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit'
-    | 'live_credit_rewards' | 'live_debit_rewards',
+    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit',
   detail: Record<string, unknown>,
   exec: (b: LiveBinding) => Promise<ProviderResult<unknown>>,
 ): Promise<string> {
@@ -689,49 +607,6 @@ export const getLiveBenefitsByProgramTool = defineTool({
   },
 });
 
-export const getLiveExpiringRewardsTool = defineTool({
-  name: 'get_live_expiring_rewards',
-  description:
-    'LIVE provider data: reward points that are about to expire, with their expiry dates. Use for "are any of my points expiring" or "will I lose points" questions — helps the customer redeem before they lose value.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    before: Type.Optional(Type.String({ description: 'Show points expiring before this date (yyyy-mm-dd). Defaults to 90 days from now.' })),
-  }),
-  execute: async ({ customer_id, before }) =>
-    withBinding(Number(customer_id), (b) => hyperfaceProvider.expiringRewards({
-      accountId: b.accountId,
-      before: before ? String(before) : undefined,
-    })),
-});
-
-export const getLiveRewardTransactionsTool = defineTool({
-  name: 'get_live_reward_transactions',
-  description:
-    'LIVE provider data: the full reward points transaction history — earn, burn, expire entries. More detail than the ledger; includes date ranges and pagination. Use for detailed rewards forensics.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    from: Type.Optional(Type.String({ description: 'Start date yyyy-mm-dd' })),
-    to: Type.Optional(Type.String({ description: 'End date yyyy-mm-dd' })),
-    count: Type.Optional(Type.Number()),
-  }),
-  execute: async ({ customer_id, from, to, count }) =>
-    withBinding(Number(customer_id), (b) => hyperfaceProvider.rewardTransactions({
-      accountId: b.accountId,
-      from: from ? String(from) : undefined,
-      to: to ? String(to) : undefined,
-      count: count != null ? Number(count) : undefined,
-    })),
-});
-
-export const getLiveRewardAccountTool = defineTool({
-  name: 'get_live_reward_account',
-  description:
-    'LIVE provider data: the reward account configuration — earning rates, tier, multiplier, base rate. Use for "how do I earn points" or "what is my rewards rate" questions.',
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) =>
-    withBinding(Number(customer_id), (b) => hyperfaceProvider.rewardAccount({ accountId: b.accountId })),
-});
-
 export const getLiveEmiListTool = defineTool({
   name: 'get_live_emi_list',
   description:
@@ -807,38 +682,6 @@ export const liveUnsubscribeBenefitTool = defineTool({
     gatedAccountAction(Number(customer_id), 'live_unsubscribe_benefit',
       { benefit_id: String(benefit_id), reason: String(reason) },
       (b) => hyperfaceProvider.unsubscribeBenefit({ accountId: b.accountId, benefitId: String(benefit_id) })),
-});
-
-// Live action tools for rewards
-
-export const liveCreditRewardsTool = defineTool({
-  name: 'live_credit_rewards',
-  description:
-    'LIVE action: credit reward points to the account (goodwill, promo, correction). Operator-only — requires verification. State the points and reason.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    points: Type.Number({ description: 'Points to credit' }),
-    description: Type.String({ description: 'Why points are being credited' }),
-  }),
-  execute: async ({ customer_id, points, description }) =>
-    gatedAccountAction(Number(customer_id), 'live_credit_rewards',
-      { points: Number(points), description: String(description) },
-      (b) => hyperfaceProvider.creditRewardPoints({ accountId: b.accountId, points: Number(points), description: String(description) })),
-});
-
-export const liveDebitRewardsTool = defineTool({
-  name: 'live_debit_rewards',
-  description:
-    'LIVE action: redeem (debit) reward points from the account in the card system of record. SENSITIVE — needs verification. Quote the balance with get_reward_points first. 1 point = INR 0.25.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    points: Type.Number({ description: 'Points to redeem' }),
-    description: Type.String({ description: 'Redemption note (e.g. "statement credit", "voucher")' }),
-  }),
-  execute: async ({ customer_id, points, description }) =>
-    gatedAccountAction(Number(customer_id), 'live_debit_rewards',
-      { points: Number(points), description: String(description) },
-      (b) => hyperfaceProvider.debitRewardPoints({ accountId: b.accountId, points: Number(points), description: String(description) })),
 });
 
 export const LIVE_READ_TOOLS = [

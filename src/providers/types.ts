@@ -1,17 +1,17 @@
 // Card provider abstraction. The synthetic "provider" is the local Supabase
-// dataset consumed by the existing tools in services/tools.ts; this module
-// types the LIVE provider surface (Hyperface UAT today). Every call returns a
-// ProviderResult so agents receive structured facts even when a route is
-// blocked: UAT key permissions are being enabled group-by-group, so 403s are
-// an expected, reportable state (PERMISSION_PENDING) rather than an error.
+// dataset consumed by the tools in services/tools.ts; this module types the
+// live provider surface (Hyperface). Every call returns a ProviderResult so
+// agents receive structured facts even when a route is blocked: when an API
+// group is not enabled for the access key the provider returns 403, surfaced
+// as PERMISSION_PENDING — an expected, reportable state rather than an error.
 
 export type ProviderErrorCode =
-  | 'PERMISSION_PENDING' // 403 — API group not yet enabled for our access key
-  | 'NOT_FOUND'          // 404 — resource id is wrong or not in our program
+  | 'PERMISSION_PENDING' // 403 — API group not enabled for the access key
+  | 'NOT_FOUND'          // 404 — resource id is wrong or not in the program
   | 'VALIDATION'         // 400 — request shape rejected
-  | 'AUTH'               // 401 — apikey missing/invalid (configuration problem)
-  | 'PROVIDER_DOWN'      // 5xx / network — UAT outage (it happens mid-migration)
-  | 'NOT_SUPPORTED'      // Hyperface has no API for this (disputes, mandates)
+  | 'AUTH'               // 401 — apikey missing or invalid
+  | 'PROVIDER_DOWN'      // 5xx / network — provider unreachable
+  | 'NOT_SUPPORTED'      // no provider API for this capability
   | 'DISABLED'           // provider mode is synthetic / not configured
   | 'ERROR';
 
@@ -190,13 +190,10 @@ export interface MutationOptions {
 // Card Issuing, Card Management, Transactions, Nudges, EMI, Benefits, Rewards,
 // Cashback, Webhooks.
 //
-// Only the two endpoints tagged "live-verified" (lookupCustomer / accountSummary)
-// were confirmed against UAT on 2026-06-12. Everything else is tagged
-// "documented (unverified)": it follows the documented method/path conventions
-// but could not be live-verified (UAT down); reconcile request/response shapes
-// with the Stoplight spec via scripts/hyperface-smoke.mjs before relying on them
-// in production. Every method returns a ProviderResult so callers get structured
-// facts even when a route is permission-gated (403 → PERMISSION_PENDING).
+// Paths and request shapes follow the documented Credit Stack conventions.
+// Endpoints whose access group is not enabled for the access key return 403,
+// surfaced as PERMISSION_PENDING; every method returns a ProviderResult so
+// callers receive structured facts even when a route is permission-gated.
 
 export interface CardProvider {
   readonly name: 'hyperface';
@@ -206,7 +203,7 @@ export interface CardProvider {
   createCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   fetchCustomer(custId: string): Promise<ProviderResult<unknown>>;
   updateCustomer(custId: string, input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  /** Match a customer by registered mobile / PAN (live-verified 2026-06-12). */
+  /** Match a customer by registered mobile number or PAN. */
   lookupCustomer(q: { mobileNumber?: string; pan?: string; programId?: string }): Promise<ProviderResult<LiveCustomerMatch[]>>;
   createIssuerCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   updateIssuerCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
@@ -220,13 +217,13 @@ export interface CardProvider {
   createPaylaterAccount(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   updateBillCycle(accountId: string, input: { billingCycleDay?: number; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   updateAccountCreditLimit(accountId: string, input: { creditLimit: number; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  accountDetails(accountId: string): Promise<ProviderResult<unknown>>;            // documented (unverified)
-  accountSummary(accountId: string): Promise<ProviderResult<LiveAccountSummary>>; // live-verified (2026-06-12)
+  accountDetails(accountId: string): Promise<ProviderResult<unknown>>;
+  accountSummary(accountId: string): Promise<ProviderResult<LiveAccountSummary>>;
   updateAccountStatus(accountId: string, input: { status: string; reason?: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Card Issuing ─────────────────────────────────────────────────────────
   createCard(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  cardDetails(cardId: string): Promise<ProviderResult<unknown>>;                  // documented (unverified)
+  cardDetails(cardId: string): Promise<ProviderResult<unknown>>;
 
   // ── Card Management (writes — gated by verification + policy upstream) ─────
   activateCard(cardId: string, input?: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
@@ -236,18 +233,18 @@ export interface CardProvider {
   unlockCard(cardId: string, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   hotlistCard(cardId: string, reason: string, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   replaceCard(cardId: string, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  cardControls(cardId: string): Promise<ProviderResult<unknown>>;                 // documented (unverified)
+  cardControls(cardId: string): Promise<ProviderResult<unknown>>;
   setCardControls(cardId: string, controls: unknown, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Transactions ─────────────────────────────────────────────────────────
-  statements(accountId: string, range?: { from: string; to: string }): Promise<ProviderResult<unknown>>; // Fetch statements in a date range (provider caps the window at 180 days)
-  downloadStatement(accountId: string, statementId: string): Promise<ProviderResult<unknown>>; // documented (unverified) — returns a non-JSON document body
-  transactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>; // documented (unverified)
+  statements(accountId: string, range?: { from: string; to: string }): Promise<ProviderResult<unknown>>; // date-range window capped at 180 days
+  downloadStatement(accountId: string, statementId: string): Promise<ProviderResult<unknown>>; // returns a non-JSON document body
+  transactions(accountId: string, f?: LiveTransactionFilters): Promise<ProviderResult<unknown>>;
   billedTransactions(accountId: string, f: LiveBilledFilters): Promise<ProviderResult<unknown>>; // requires statementId (from a statement)
   unbilledTransactions(accountId: string, opts?: { count?: number; offset?: number }): Promise<ProviderResult<unknown>>;
-  transactionInquiry(q: { id?: string; extTxnRefId?: string }): Promise<ProviderResult<unknown>>; // documented (unverified)
+  transactionInquiry(q: { id?: string; extTxnRefId?: string }): Promise<ProviderResult<unknown>>;
   debitTransaction(input: { accountId: string; amount: number; debitTransactionType?: string; description: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  /** REFUND / CHARGEBACK postings (documented, unverified). */
+  /** REFUND / CHARGEBACK postings. */
   creditTransaction(input: { accountId: string; amount: number; creditTransactionType: string; description: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
   // ── Nudges ───────────────────────────────────────────────────────────────

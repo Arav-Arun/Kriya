@@ -39,7 +39,7 @@ export interface KriyaConfig {
   };
   hyperface: {
     baseUrl: string;
-    /** Datasource selector — "DEFAULT" for our UAT programs (per Hyperface). */
+    /** Datasource selector — "DEFAULT" for the configured programs (per Hyperface). */
     tenantId: string;
     /** API version sent as x-accept-hf-version. Hyperface versions its endpoints
      *  via this header; without it the gateway defaults to v1. Latest is v2. */

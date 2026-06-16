@@ -86,7 +86,7 @@ export function parseTelegramUpdate(body: any): TelegramInbound {
   if (!text) return null;
   const phone = phoneByChatId.get(chatId);
 
-  // UAT fallback: allow identity binding by typing a number instead of contact share.
+  // Fallback: allow identity binding by typing a number instead of sharing a contact.
   if (config.providerMode === 'hyperface_uat' && (!phone || !/[a-z]/i.test(text))) {
     const typed = extractIndianMobile(text);
     if (typed && typed !== phone) {
