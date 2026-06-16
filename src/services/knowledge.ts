@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tokenize } from '../database/queries.ts';
 
-// Resolve project root containing the knowledge/ folder.
+// Resolve project root containing the policies/ folder.
 let ROOT = path.dirname(fileURLToPath(import.meta.url));
-while (ROOT !== path.dirname(ROOT) && !existsSync(path.join(ROOT, 'knowledge'))) {
+while (ROOT !== path.dirname(ROOT) && !existsSync(path.join(ROOT, 'policies'))) {
   ROOT = path.dirname(ROOT);
 }
 
@@ -17,7 +17,7 @@ export interface KnowledgeDoc {
 }
 
 function loadDir(dir: string): KnowledgeDoc[] {
-  const full = path.join(ROOT, 'knowledge', dir);
+  const full = path.join(ROOT, dir);
   return readdirSync(full)
     .filter((f) => f.endsWith('.md'))
     .map((f) => {
