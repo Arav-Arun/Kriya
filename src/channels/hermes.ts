@@ -57,21 +57,11 @@ async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
   if (key.length < 10) return null;
 
   let match: any = null;
+  // lookupCustomer is the live phone/PAN resolver. (fetchIssuerCustomer is
+  // id-based — no phone param — so it can't serve as a by-phone fallback.)
   const lookup = await hyperfaceProvider.lookupCustomer({ mobileNumber: key });
   if (lookup.ok && lookup.data.length > 0) {
     match = lookup.data[0];
-  } else {
-    const issuerRes = await hyperfaceProvider.fetchIssuerCustomer({ mobileNumber: key });
-    if (issuerRes.ok && issuerRes.data) {
-      const data = issuerRes.data as any;
-      const customer = Array.isArray(data) ? data[0] : data;
-      if (customer && (customer.customerId || customer.id)) {
-        match = {
-          customerId: customer.customerId || customer.id,
-          accounts: customer.accounts || [],
-        };
-      }
-    }
   }
 
   if (!match) return null;

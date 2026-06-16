@@ -145,7 +145,7 @@ export const hyperfaceProvider: CardProvider = {
 
   createIssuerCustomer: (input, o) => call('/customers/issuer/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   updateIssuerCustomer: (input, o) => call('/customers/issuer/update', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  fetchIssuerCustomer: (input) => call('/customers/issuer/fetch', { method: 'POST', body: input }),
+  fetchIssuerCustomer: (input) => call('/customers/fetchIssuerCustomer', { method: 'POST', body: input }),
 
   // Accounts (Credit Card) endpoints
   createCreditAccount: (input, o) => call('/accounts/create', { method: 'POST', body: input, idempotencyKey: idem(o) }),

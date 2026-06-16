@@ -48,21 +48,11 @@ export async function resolveLiveBinding(customerId: number): Promise<LiveBindin
   const phone = phoneKey(String(customer?.phone ?? ''));
   if (phone.length === 10) {
     let match: any = null;
+    // lookupCustomer is the live phone/PAN resolver. (fetchIssuerCustomer is
+    // id-based — no phone param — so it can't serve as a by-phone fallback.)
     const res = await hyperfaceProvider.lookupCustomer({ mobileNumber: phone });
     if (res.ok && res.data.length > 0) {
       match = res.data[0];
-    } else {
-      const issuerRes = await hyperfaceProvider.fetchIssuerCustomer({ mobileNumber: phone });
-      if (issuerRes.ok && issuerRes.data) {
-        const data = issuerRes.data as any;
-        const customer = Array.isArray(data) ? data[0] : data;
-        if (customer && (customer.customerId || customer.id)) {
-          match = {
-            customerId: customer.customerId || customer.id,
-            accounts: customer.accounts || [],
-          };
-        }
-      }
     }
 
     if (match) {

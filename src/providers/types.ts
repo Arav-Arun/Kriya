@@ -128,7 +128,10 @@ export interface CardProvider {
   lookupCustomer(q: { mobileNumber?: string; pan?: string; programId?: string }): Promise<ProviderResult<LiveCustomerMatch[]>>;
   createIssuerCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   updateIssuerCustomer(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  fetchIssuerCustomer(input: { customerId?: string; mobileNumber?: string; pan?: string }): Promise<ProviderResult<unknown>>;
+  /** Fetch an issuer customer by issuer-customer id or customerRefId. Provider
+   *  requires one of `id` / `customerRefId` (no phone/PAN lookup here — use
+   *  lookupCustomer for that). Path: POST /customers/fetchIssuerCustomer. */
+  fetchIssuerCustomer(input: { id?: string; customerRefId?: string }): Promise<ProviderResult<unknown>>;
 
   // ── Accounts (Credit Card) ───────────────────────────────────────────────
   createCreditAccount(input: Record<string, unknown>, o?: MutationOptions): Promise<ProviderResult<unknown>>;
