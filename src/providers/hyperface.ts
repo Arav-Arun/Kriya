@@ -216,7 +216,8 @@ export const hyperfaceProvider: CardProvider = {
   unsubscribeBenefit: (input, o) => call('/benefits/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
   // Rewards endpoints
-  rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId } }),
+  createRewardsAccount: (accountId) => call('/smartBenefit/rewards/createRewardsAccount', { method: 'POST', body: { accountId } }),
+  rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId }, apiKey: config.hyperface.issuerSecretKey }),
   rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId } }),
   creditRewardPoints: (input, o) => call('/rewards/credit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   debitRewardPoints: (input, o) => call('/rewards/debit', { method: 'POST', body: input, idempotencyKey: idem(o) }),

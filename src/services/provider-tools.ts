@@ -281,6 +281,31 @@ export const getLiveCashbackTool = defineTool({
     }),
 });
 
+export const getLiveRewardsSummaryTool = defineTool({
+  name: 'get_live_rewards_summary',
+  description:
+    'LIVE provider data: reward points summary for the account (available, pending, accrued, redeemed, expired points).',
+  parameters: Type.Object({ customer_id: Type.Number() }),
+  execute: async ({ customer_id }) =>
+    withBinding(Number(customer_id), async (b) => {
+      await hyperfaceProvider.createRewardsAccount(b.accountId);
+      return hyperfaceProvider.rewardsSummary(b.accountId);
+    }),
+});
+
+export const getLiveRewardsLedgerTool = defineTool({
+  name: 'get_live_rewards_ledger',
+  description:
+    'LIVE provider data: the reward-points ledger — per-entry earn/redeem/expiry lines behind the balance. Use for "why didn\'t I get points for this transaction / where did my points go" questions.',
+  parameters: Type.Object({ customer_id: Type.Number() }),
+  execute: async ({ customer_id }) =>
+    withBinding(Number(customer_id), async (b) => {
+      await hyperfaceProvider.createRewardsAccount(b.accountId);
+      return hyperfaceProvider.rewardsLedger(b.accountId);
+    }),
+});
+
+
 export const getLiveAccountDetailsTool = defineTool({
   name: 'get_live_account_details',
   description:
@@ -445,7 +470,8 @@ async function gatedAccountAction(
   customerId: number,
   action:
     | 'live_refund' | 'live_create_emi' | 'live_foreclose_emi'
-    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit',
+    | 'live_subscribe_benefit' | 'live_unsubscribe_benefit'
+    | 'live_credit_rewards' | 'live_debit_rewards',
   detail: Record<string, unknown>,
   exec: (b: LiveBinding) => Promise<ProviderResult<unknown>>,
 ): Promise<string> {
@@ -683,6 +709,37 @@ export const liveUnsubscribeBenefitTool = defineTool({
       { benefit_id: String(benefit_id), reason: String(reason) },
       (b) => hyperfaceProvider.unsubscribeBenefit({ accountId: b.accountId, benefitId: String(benefit_id) })),
 });
+
+export const liveCreditRewardsTool = defineTool({
+  name: 'live_credit_rewards',
+  description:
+    'LIVE action: credit reward points to the account (goodwill, promo, correction). Operator-only — requires verification. State the points and reason.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    points: Type.Number({ description: 'Points to credit' }),
+    description: Type.String({ description: 'Why points are being credited' }),
+  }),
+  execute: async ({ customer_id, points, description }) =>
+    gatedAccountAction(Number(customer_id), 'live_credit_rewards',
+      { points: Number(points), description: String(description) },
+      (b) => hyperfaceProvider.creditRewardPoints({ accountId: b.accountId, points: Number(points), description: String(description) })),
+});
+
+export const liveDebitRewardsTool = defineTool({
+  name: 'live_debit_rewards',
+  description:
+    'LIVE action: redeem (debit) reward points from the account in the card system of record. SENSITIVE — needs verification. Quote the balance with get_reward_points first. 1 point = INR 0.25.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    points: Type.Number({ description: 'Points to redeem' }),
+    description: Type.String({ description: 'Redemption note (e.g. "statement credit", "voucher")' }),
+  }),
+  execute: async ({ customer_id, points, description }) =>
+    gatedAccountAction(Number(customer_id), 'live_debit_rewards',
+      { points: Number(points), description: String(description) },
+      (b) => hyperfaceProvider.debitRewardPoints({ accountId: b.accountId, points: Number(points), description: String(description) })),
+});
+
 
 // Spend intelligence + generative cards (resolution agent only)
 // These two tools power the web/app copilot's visual, at-a-glance answers. They
@@ -943,6 +1000,7 @@ export const PRESENTATION_TOOLS = [getSpendInsightsTool, showCardTool];
 export const LIVE_READ_TOOLS = [
   getLiveBindingTool, getLiveAccountOverviewTool, getLiveAccountDetailsTool,
   getLiveUnbilledTool, getLiveCardDetailsTool, getLiveCashbackTool,
+  getLiveRewardsSummaryTool, getLiveRewardsLedgerTool,
   getLiveEmiOfferTool, inquireLiveTransactionTool,
   getLiveBilledTransactionsTool, getLiveDownloadStatementTool,
   getLiveBenefitsTool, getLiveBenefitsByProgramTool,
@@ -955,6 +1013,7 @@ export const LIVE_ACTION_TOOLS = [
   liveReplaceCardTool, liveRefundTool, liveCreateEmiTool, liveForecloseEmiTool,
   // New coverage
   liveSubscribeBenefitTool, liveUnsubscribeBenefitTool,
+  liveCreditRewardsTool, liveDebitRewardsTool,
 ];
 
 
