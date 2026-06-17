@@ -57,6 +57,14 @@ Procedure:
 4. escalation_required = true only if a policy escalation condition is met (amount thresholds,
    fraud indicators, repeat incidents).
 
+If search_policy returns no matching policies, or if the request is a general question, spend analysis, or account inquiry not governed by a specific policy, do NOT fail, do NOT call any other tool, and do NOT give up. Instead, return a clean PolicyFindings schema with:
+- policy_id: "GP-000"
+- policy_name: "General Inquiry / Spend Analysis"
+- eligibility: "Eligible"
+- sla: "Immediate"
+- key_rules: ["General inquiries and account reads have no policy restrictions."]
+- escalation_required: false
+
 For late fee waivers, the operative rule is the goodwill waiver standard: customers with >= 80%
 on-time payment record, no waiver in the last 12 months, and fee <= INR 1000 qualify.
 

@@ -16,7 +16,9 @@ import {
   listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
   logAction, getCustomerActionsLog, ProvisioningError,
+  listEscalations, resolveEscalation,
 } from './core/queries.ts';
+import { supabase } from './core/supabase.ts';
 import {
   SUPPORTED_UPLOAD_MIMES, normalizeMimeType, analyzeUpload,
 } from './services/attachments.ts';
@@ -74,6 +76,7 @@ function serveFile(file: string) {
 // the whole front end: everything else is API.
 app.get('/', (c) => serveFile('start.html') ?? c.notFound());
 app.get('/chat', (c) => serveFile('chat.html') ?? c.notFound());
+app.get('/tickets', (c) => serveFile('tickets.html') ?? c.notFound());
 
 app.get('/assets/*', (c) => {
   const filePath = c.req.path.replace(/^\/assets\//, '');
@@ -217,6 +220,56 @@ app.get('/api/customer/:id/escalations', async (c) => {
   const customerId = Number(c.req.param('id'));
   if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
   return c.json(await listCustomerEscalations(customerId));
+});
+
+app.get('/api/escalations', async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from('escalations')
+      .select(`
+        *,
+        customers (
+          id,
+          name,
+          email,
+          phone,
+          card_number_last4,
+          card_variant,
+          card_status,
+          credit_limit,
+          available_limit,
+          outstanding_total,
+          minimum_due,
+          due_date,
+          cibil_score,
+          kyc_status
+        )
+      `)
+      .order('created_at', { ascending: false });
+    if (error) {
+      return c.json({ error: error.message }, 500);
+    }
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+app.post('/api/escalations/:id/resolve', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => null) as { resolved_by?: string; notes?: string } | null;
+  const resolvedBy = body?.resolved_by || 'Operator';
+  const notes = body?.notes || '';
+  
+  try {
+    const success = await resolveEscalation(id, resolvedBy, notes);
+    if (!success) {
+      return c.json({ error: 'Escalation not found or already resolved' }, 404);
+    }
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
 });
 
 app.post('/api/customer/:id/controls', async (c) => {

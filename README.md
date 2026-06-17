@@ -25,10 +25,10 @@ Each user interaction triggers a durable Flue workflow orchestrating specialized
 [Customer Msg] ──▶  Triage Agent  ──▶ (Investigation Agent ∥ Policy Agent) ──▶ Resolution Agent ──▶ [Card Mutation / Reply]
 ```
 
-* **Triage**: Classifies category, urgency, and routing.
-* **Investigation**: Performs read-only forensics against live databases and APIs.
-* **Policy**: Searches the policies database to extract rules and SLAs.
-* **Resolution**: Verifies identity (card last-4; there is no OTP step), runs the deterministic policy gates, renders visual answer cards, and executes card updates directly against the system of record.
+- **Triage**: Classifies category, urgency, and routing.
+- **Investigation**: Performs read-only forensics against live databases and APIs.
+- **Policy**: Searches the policies database to extract rules and SLAs.
+- **Resolution**: Verifies identity (card last-4; there is no OTP step), runs the deterministic policy gates, renders visual answer cards, and executes card updates directly against the system of record.
 
 ---
 
@@ -50,11 +50,13 @@ Each user interaction triggers a durable Flue workflow orchestrating specialized
 ## Getting Started
 
 ### Prerequisites
-* Node.js ≥ 22.18
-* Supabase credentials
-* OpenAI API Key & Sarvam API Key (for Voice)
+
+- Node.js ≥ 22.18
+- Supabase credentials
+- OpenAI API Key & Sarvam API Key (for Voice)
 
 ### Run Locally
+
 1. Install dependencies:
    ```bash
    npm install

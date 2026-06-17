@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kriya - Support Tickets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/assets/tickets.css">
+</head>
+<body class="tickets-body">
+<header class="chat-header">
+  <a href="/chat" class="icon-btn" title="Back to Chat" aria-label="Back to Chat" style="text-decoration:none;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="19" y1="12" x2="5" y2="12"></line>
+      <polyline points="12 19 5 12 12 5"></polyline>
+    </svg>
+  </a>
+  <a href="/" class="chat-brand"><img src="/assets/assets/kriya-logo.png" width="26" height="26" alt="" class="brand-logo">Kriya</a>
+  <div class="header-title-addon">/ Tickets</div>
+</header>
+
+<main class="tickets-main">
+  <!-- Filter Controls -->
+  <section class="filters-bar">
+    <div class="filter-group search-wrap">
+      <input type="text" id="search-input" placeholder="Search by ID, customer name or issue..." autocomplete="off">
+    </div>
+    <div class="filter-group">
+      <select id="filter-priority">
+        <option value="">All Priorities</option>
+        <option value="Critical">Critical</option>
+        <option value="High">High</option>
+        <option value="Medium">Medium</option>
+        <option value="Low">Low</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select id="filter-category">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select id="filter-team">
+        <option value="">All Teams</option>
+        <option value="Customer Service">Customer Service</option>
+        <option value="Disputes Operations">Disputes Operations</option>
+        <option value="Fraud Operations">Fraud Operations</option>
+        <option value="Card Operations">Card Operations</option>
+        <option value="Risk Operations">Risk Operations</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Board Columns -->
+  <section class="board-columns">
+    <div class="board-column" id="col-open">
+      <div class="column-header">
+        <h2>Open Tickets</h2>
+        <span class="column-count" id="count-open">0</span>
+      </div>
+      <div class="column-cards" id="cards-open">
+        <div class="loading-state">Loading tickets...</div>
+      </div>
+    </div>
+    
+    <div class="board-column" id="col-resolved">
+      <div class="column-header">
+        <h2>Resolved Tickets</h2>
+        <span class="column-count" id="count-resolved">0</span>
+      </div>
+      <div class="column-cards" id="cards-resolved">
+        <div class="loading-state">Loading tickets...</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Details Drawer/Side Panel -->
+<div class="details-backdrop" id="details-backdrop"></div>
+<aside class="details-drawer" id="details-drawer">
+  <div class="drawer-header">
+    <div>
+      <span class="ticket-id-large" id="drawer-ticket-id">ESC-XXXX</span>
+      <span class="badge" id="drawer-ticket-priority">High</span>
+    </div>
+    <button class="icon-btn" id="drawer-close" type="button" aria-label="Close details">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  
+  <div class="drawer-content">
+    <div class="section-title">Escalation Summary</div>
+    <h3 class="ticket-summary-title" id="drawer-summary">Loading...</h3>
+    
+    <div class="meta-grid">
+      <div class="meta-item"><span class="label">Category:</span> <span id="drawer-category">-</span></div>
+      <div class="meta-item"><span class="label">Assigned Team:</span> <span id="drawer-team">-</span></div>
+      <div class="meta-item"><span class="label">Status:</span> <span id="drawer-status">-</span></div>
+      <div class="meta-item"><span class="label">Created At:</span> <span id="drawer-created-at">-</span></div>
+    </div>
+    
+    <div class="section-title">Investigation Notes</div>
+    <div class="notes-box" id="drawer-investigation">-</div>
+    
+    <div class="section-title">Recommended Action</div>
+    <div class="notes-box highlight" id="drawer-recommended-action">-</div>
+    
+    <div class="section-title">Customer Profile</div>
+    <div class="customer-profile-card">
+      <div class="profile-row">
+        <div><strong>Name:</strong> <span id="cust-name">-</span></div>
+        <div><strong>Phone:</strong> <span id="cust-phone">-</span></div>
+      </div>
+      <div class="profile-row">
+        <div><strong>Email:</strong> <span id="cust-email">-</span></div>
+        <div><strong>CIBIL Score:</strong> <span id="cust-cibil">-</span></div>
+      </div>
+      <div class="profile-divider"></div>
+      <div class="profile-row">
+        <div><strong>Card Variant:</strong> <span id="cust-variant">-</span></div>
+        <div><strong>Card Last 4:</strong> <span id="cust-last4">-</span></div>
+        <div><strong>Card Status:</strong> <span id="cust-status">-</span></div>
+      </div>
+      <div class="profile-divider"></div>
+      <div class="balance-grid">
+        <div><span class="label">Outstanding</span><div class="amount" id="cust-outstanding">-</div></div>
+        <div><span class="label">Available Limit</span><div class="amount" id="cust-available">-</div></div>
+        <div><span class="label">Credit Limit</span><div class="amount" id="cust-limit">-</div></div>
+      </div>
+      <div class="profile-row" style="margin-top: 10px;">
+        <div><strong>Minimum Due:</strong> <span id="cust-mindue">-</span></div>
+        <div><strong>Due Date:</strong> <span id="cust-duedate">-</span></div>
+        <div><strong>KYC Status:</strong> <span id="cust-kyc">-</span></div>
+      </div>
+    </div>
+    
+    <!-- Tabbed customer activity logs (transactions, disputes, audit log) -->
+    <div class="activity-section">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="tab-txns">Transactions</button>
+        <button class="tab-btn" data-tab="tab-disputes">Disputes</button>
+        <button class="tab-btn" data-tab="tab-logs">Audit Log</button>
+      </div>
+      
+      <div class="tab-content active" id="tab-txns">
+        <div class="loading-state">Loading transactions...</div>
+      </div>
+      
+      <div class="tab-content" id="tab-disputes">
+        <div class="loading-state">Loading disputes...</div>
+      </div>
+      
+      <div class="tab-content" id="tab-logs">
+        <div class="loading-state">Loading audit log...</div>
+      </div>
+    </div>
+    
+    <!-- Resolution action box -->
+    <div class="resolution-box" id="resolution-action-box">
+      <div class="section-title">Resolve Escalation</div>
+      <textarea id="resolution-notes" placeholder="Enter details of resolution actions taken..."></textarea>
+      <div class="resolution-buttons">
+        <button type="button" class="btn-resolve" id="btn-submit-resolve">Mark as Resolved</button>
+      </div>
+    </div>
+
+    <!-- Resolved details box (only shown if ticket is resolved) -->
+    <div class="resolved-info-box" id="resolved-info-box" hidden>
+      <div class="section-title">Resolution Details</div>
+      <div class="profile-row">
+        <div><strong>Resolved By:</strong> <span id="ticket-resolved-by">-</span></div>
+        <div><strong>Resolved At:</strong> <span id="ticket-resolved-at">-</span></div>
+      </div>
+      <div style="margin-top: 10px;">
+        <strong>Resolution Notes:</strong>
+        <div class="notes-box" style="margin-top: 6px;" id="ticket-resolved-notes">-</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script type="module" src="/assets/tickets.js"></script>
+</body>
+</html>
