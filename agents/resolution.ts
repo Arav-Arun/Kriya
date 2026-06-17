@@ -17,7 +17,7 @@ import { POLICY_TOOLS } from '../services/policy-gates.ts';
 import { LIVE_READ_TOOLS, LIVE_ACTION_TOOLS, PRESENTATION_TOOLS } from '../services/provider-tools.ts';
 import { VERIFICATION_TOOLS } from '../services/verify.ts';
 
-const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4.1';
+const MODEL = process.env.SENTINEL_MODEL ?? 'openai/gpt-4o-mini';
 
 export default createAgent(() => ({
   name: 'sentinel-resolution',

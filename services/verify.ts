@@ -1,28 +1,7 @@
-// Customer verification for in-chat actions: is the person typing actually
-// the cardholder, or someone random?
-//
-// Factor model (deterministic, auditable):
-//   1. POSSESSION — the customer is in a live Kriya session: the web copilot
-//      (signed in with their registered mobile number) or a trusted messaging
-//      channel bound to that number (e.g. the verified Telegram webhook). Every
-//      supported entry path grants possession, so it is effectively session-level
-//      and is NEVER the factor a customer has to "go elsewhere" to satisfy.
-//   2. KNOWLEDGE — the customer states their card's last 4 digits in chat and
-//      it matches the account record. Valid 30 minutes. This is the only factor
-//      the customer actively supplies, and they can always do it right here.
-//
-// Sensitive (high-risk) actions need BOTH factors. Low-risk/protective actions
-// (block/lock card, reads) need none beyond the session. Every factor event
-// and every denial is written to the audit log, and action tools attach the
-// verification level they ran at.
-//
-// There is deliberately NO OTP/SMS factor: Kriya has no SMS sender, so it must
-// never claim to text a code it cannot deliver. Sensitive actions are gated on
-// possession (a verified messaging channel) plus knowledge (card last-4). If a
-// real out-of-band sender is added later, reintroduce OTP as a third factor.
-//
-// State is in-memory (UAT/demo scale); the audit trail in actions_log is the
-// durable record.
+// Chat session verification using two-factor logic:
+// 1. Possession: Active web session or verified/trusted messaging channel.
+// 2. Knowledge: Card last-4 digits matched against the account record (valid for 30 min).
+// Sensitive actions require both factors. Read-only and emergency blocks require possession only.
 import { defineTool, Type } from '@flue/runtime';
 import { getCustomer, logAction } from '../core/queries.ts';
 
@@ -53,10 +32,7 @@ function fresh(at: number | undefined, ttlMs: number): boolean {
 
 // Risk classification rules
 
-/** Actions that move money, loosen security, or are irreversible. Each needs
- *  BOTH identity factors (trusted-channel possession + card-last-4 knowledge)
- *  before it runs. Protective actions (block/lock a card) are deliberately NOT
- *  here — we never delay locking down a card the customer fears is compromised. */
+/** High-risk actions requiring both identity factors (possession + knowledge). */
 export const HIGH_RISK_ACTIONS = new Set([
   'unblock_card', 'hotlist_card', 'initiate_card_closure', 'replace_card',
   'initiate_refund', 'adjust_credit_limit', 'redeem_rewards', 'waive_fee',
@@ -123,12 +99,7 @@ export async function assertActionAllowed(customerId: number, actionType: string
     return { allowed: true, level, reason: `Two-factor verification satisfied (${level}).` };
   }
 
-  // Possession is granted by every supported entry path — the web copilot and
-  // trusted messaging channels alike (see verificationStatus). So the only factor
-  // a customer ever has to actively supply for a sensitive action is the card
-  // last-4 (knowledge), and they can always do that right here in chat. There is
-  // deliberately NO "do this from another channel" outcome: the customer is
-  // already on a valid one, so we never dead-end them off to Telegram.
+  // Possession is established via session; request knowledge factor (card last-4) to satisfy 2FA.
   const needed = 'knowledge' as const;
   await logAction({
     customer_id: customerId,
@@ -156,14 +127,7 @@ export async function verifyKnowledge(customerId: number, cardLast4: string): Pr
   return { verified: true };
 }
 
-/**
- * Deterministic verification of a customer's numeric reply, run by the chat
- * workflow BEFORE the resolution agent: a standalone 4-digit token while the
- * knowledge factor is stale verifies the card last-4. Security-critical factor
- * handling must not hinge on a small model picking the right tool. Returns a
- * short note for the agent's context (and whether it acted), so the agent
- * re-attempts the pending action instead of re-asking for the factor.
- */
+/** Deterministically checks user input for a 4-digit card verification code. */
 export async function handleVerificationReply(
   customerId: number,
   message: string,

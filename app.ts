@@ -80,7 +80,7 @@ app.get('/assets/*', (c) => {
   return serveFile(filePath) ?? c.notFound();
 });
 
-let cachedBotUsername: string | null = null;
+let cachedBotUsername: string | null = 'kriya_copilot_bot';
 
 async function getTelegramBotUsername(): Promise<string | null> {
   if (cachedBotUsername) return cachedBotUsername;
@@ -95,7 +95,11 @@ async function getTelegramBotUsername(): Promise<string | null> {
   } catch (err) {
     console.error('[telegram] failed to fetch bot info:', err);
   }
-  return null;
+  return 'kriya_copilot_bot';
+}
+
+if (config.telegram.botToken) {
+  getTelegramBotUsername().catch(() => {});
 }
 
 // Public config for the web surfaces: which channels are live, the demo

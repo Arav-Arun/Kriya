@@ -1,8 +1,4 @@
-// One customer chat turn, as a Flue workflow:
-//   Triage → (Account Evidence ∥ Policy Check) → Action Execution.
-// The two review operations run in parallel for complex issues and are skipped for
-// simple turns. The Action Execution agent holds the persistent per-customer session
-// (chat-{customerId}), so conversation memory survives reloads and restarts.
+// Orchestrates a single customer chat turn: Triage -> (Forensics || Policy Check) -> Resolution.
 import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
 import triageAgent from '../agents/triage.ts';
 import investigationAgent from '../agents/investigation.ts';
@@ -21,8 +17,7 @@ interface Payload {
   customer_id: number;
   conversation_id?: number;
   message: string;
-  /** Where this turn came from. Trusted channels (signature/token-verified
-   *  webhooks bound to the registered number) grant the possession factor. */
+  /** Session origin details for identity validation. */
   channel?: { kind: string; peer?: string; trusted?: boolean };
 }
 
@@ -46,11 +41,7 @@ export async function run(ctx: FlueContext<Payload>) {
     ? `Channel: ${channel.kind} (trusted — message from the registered mobile number; possession factor satisfied)`
     : `Channel: ${channel?.kind ?? 'web'} (web copilot session — possession factor satisfied; ACCOUNT READS (balance, limits, statements, transactions, card status) NEED NO VERIFICATION; only a sensitive action needs the card last-4)`;
 
-  // Deterministic identity-factor handling, BEFORE the agent runs. If the
-  // customer replied with a code, the workflow verifies it itself — security
-  // factor routing must not hinge on a small model picking the right tool.
-  // This and the conversation lookup are independent, so run them together to
-  // shave a DB round-trip off the front of every turn.
+  // Deterministic validation of input digits before resolution step.
   const [verification, conv] = await Promise.all([
     handleVerificationReply(customerId, message),
     requestedConversationId ? getConversation(customerId, requestedConversationId) : Promise.resolve(null),
@@ -64,7 +55,7 @@ export async function run(ctx: FlueContext<Payload>) {
   const turnStartedAt = new Date().toISOString();
   const activeConversationId = await addMessage(customerId, 'user', message, null, conversationId);
 
-  // Stage wrapper: emits run-stream log events the chat UI's analysis card consumes.
+  // Helper to log metrics and update client status cards.
   async function stage<T>(name: string, label: string, fn: () => Promise<T>): Promise<T> {
     const t0 = Date.now();
     ctx.log.info('stage', { stage: name, label, status: 'running' });
@@ -79,8 +70,7 @@ export async function run(ctx: FlueContext<Payload>) {
   }
 
   try {
-    // These three reads are mutually independent — fetch them concurrently
-    // rather than in series so the agent pipeline starts sooner.
+    // Concurrently fetch recent conversation and attachment context.
     const [recentMsgs, recentAttachments, lastAssistantMsg] = await Promise.all([
       getRecentMessages(customerId, 6, activeConversationId),
       getRecentAttachments(customerId, 4),
@@ -187,7 +177,7 @@ export async function run(ctx: FlueContext<Payload>) {
       ? (typeof stateAction.action_detail === 'string' ? JSON.parse(stateAction.action_detail).state : (stateAction.action_detail as any).state)
       : null;
 
-    // Filter out internal system logs (like verification logs or state updates) from the UI-facing actions list.
+    // Filter internal logs from user audit.
     const actions = rawActions
       .filter((a: any) => ![
         'conversation_state_updated',
@@ -201,8 +191,7 @@ export async function run(ctx: FlueContext<Payload>) {
         at: a.performed_at,
       }));
 
-    // ui_card entries are presentational (a rendered balance/spend/txn card), not
-    // side effects — exclude them when deciding whether real work happened.
+    // Exclude presentational elements from action logs.
     const sideEffects = actions.filter((a) => a.type !== 'ui_card');
     const escalated = sideEffects.some((a) => a.type === 'escalation_created');
     const rejected = sideEffects.some((a) => String(a.type ?? '').endsWith('_rejected'));
@@ -223,7 +212,7 @@ export async function run(ctx: FlueContext<Payload>) {
 
     return { reply, actions, triage, analyzed: analysis !== null, status, conversation_id: activeConversationId };
   } catch (err) {
-    // Production guarantee: the chat never dead-ends. Apologize and hand off to a human.
+    // Fallback: log exception, escalate to support operations, and notify.
     const escalationId = await createEscalation({
       customer_id: customerId,
       category: 'General',

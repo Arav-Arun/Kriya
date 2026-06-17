@@ -19,9 +19,7 @@ import { assertActionAllowed } from './verify.ts';
 import { tryLinkedRead, linkedLiveSummary } from './provider-tools.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 
-// Policy & pricing constants
-// Single source of truth for every magic literal that is enforced in code
-// AND quoted in a tool description, so the number can't drift between the two.
+// Policy & pricing constants mapped to tool descriptions.
 // EMI pricing
 const EMI_ALLOWED_TENURES = [3, 6, 9, 12, 18, 24] as const;
 const EMI_RATE_SHORT_PCT = 14;              // annual rate for tenure <= 6 months
@@ -40,18 +38,10 @@ const CREDIT_LIMIT_AUTO_APPROVE_MULTIPLIER = 1.5; // max auto-approved limit vs 
 const DISPUTE_PROVISIONAL_CREDIT_SLA = '7 working days';
 const DISPUTE_RESOLUTION_SLA = '30-45 days';
 
-// Label for any figure read from DB rows that are app/seed state with no live
-// feed behind them — must never be presented as the customer's real account data.
+// Fallback label for un-synchronized DB records.
 const SOURCE_RECORDS_ON_FILE = 'records_on_file';
 
-/**
- * Strict-live policy: customer account data comes only from the Hyperface
- * system of record. When a live read is unavailable — no phone-linked account,
- * the provider feed is not enabled (403), or the provider is down — return an
- * explicit "unavailable" rather than a records-on-file snapshot presented as
- * the customer's real data. `note` carries the live reason
- * (PERMISSION_PENDING / provider message) when known.
- */
+/** Fallback response when system of record details are unavailable. */
 function liveUnavailable(feed: string, note?: string): string {
   return JSON.stringify({
     source: 'live_unavailable',
@@ -62,13 +52,7 @@ function liveUnavailable(feed: string, note?: string): string {
   });
 }
 
-/**
- * The transactions endpoint requires a {from,to} window and caps it at 90 days;
- * with no window it returns the current cycle only (empty for any account whose
- * activity predates it). Default to the last 89 days (yyyy-MM-dd, safely under
- * the cap). When only `to` is given, `from` is 89 days before it, so the agent
- * can pull an older 90-day slice by passing just an end date.
- */
+/** Generates a 90-day window for transaction queries. */
 function transactionWindow(from?: string, to?: string): { from: string; to: string } {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   const toDate = to ? new Date(to) : new Date();
@@ -76,11 +60,7 @@ function transactionWindow(from?: string, to?: string): { from: string; to: stri
   return { from: fmt(fromDate), to: fmt(toDate) };
 }
 
-/**
- * Deterministic identity gate for sensitive actions. Returns null when the
- * session is sufficiently verified; otherwise a ready-to-return JSON failure
- * instructing the agent to run the verification flow and retry.
- */
+/** Enforces 2FA logic before executing sensitive actions. */
 async function requireVerified(customerId: number, actionType: string): Promise<string | null> {
   const verdict = await assertActionAllowed(customerId, actionType);
   if (verdict.allowed) return null;
