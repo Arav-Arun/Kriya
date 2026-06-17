@@ -262,15 +262,48 @@ function bootChat(customer) {
     const label = days != null && days >= 28 && days <= 31
       ? 'Spending · last 30 days'
       : (c.window?.from ? `Spending · ${fmtCardDate(c.window.from)}–${fmtCardDate(c.window.to)}` : 'Spending');
-    const cats = (c.categories || []).map((cat) => `
-      <li>
-        <span class="kc-cat-name">${esc(cat.label)}</span>
-        <span class="kc-cat-bar"><i style="width:${Math.max(4, cat.pct)}%"></i></span>
-        <span class="kc-cat-amt">${inr(cat.amount)}</span>
-      </li>`).join('');
+
+    const colors = ['var(--indigo)', 'var(--saffron)', 'var(--green)', 'var(--amber)', 'var(--red)'];
+    let currentPercent = 0;
+    const segments = (c.categories || []).map((cat, index) => {
+      const strokeLength = (cat.pct / 100) * 238.76;
+      const offset = 238.76 - (currentPercent / 100) * 238.76;
+      currentPercent += cat.pct;
+      const color = colors[index % colors.length];
+      return `<circle cx="50" cy="50" r="38" fill="transparent" stroke="${color}" stroke-width="8" stroke-dasharray="${strokeLength} 238.76" stroke-dashoffset="${offset}" transform="rotate(-90 50 50)" />`;
+    }).join('');
+
+    const totalStr = inr(c.total);
+    const amtFontSize = totalStr.length > 8 ? '7.5' : totalStr.length > 6 ? '9' : '10';
+
+    const svgChart = `
+      <svg class="kc-spend-donut" width="100" height="100" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="38" fill="transparent" stroke="var(--surface-2)" stroke-width="8" />
+        ${segments}
+        <text x="50" y="47" font-size="7" font-family="var(--sans)" font-weight="700" text-anchor="middle" fill="var(--faint)" letter-spacing="0.04em">TOTAL</text>
+        <text x="50" y="60" font-size="${amtFontSize}" font-family="var(--serif)" font-weight="700" text-anchor="middle" fill="var(--text)">${totalStr}</text>
+      </svg>
+    `;
+
+    const cats = (c.categories || []).map((cat, index) => {
+      const color = colors[index % colors.length];
+      return `
+        <li class="kc-cat-item">
+          <span class="kc-cat-name-wrap">
+            <i class="kc-cat-dot" style="background-color: ${color}"></i>
+            <span class="kc-cat-name">${esc(cat.label)}</span>
+          </span>
+          <span class="kc-cat-pct">${cat.pct}%</span>
+          <span class="kc-cat-amt">${inr(cat.amount)}</span>
+        </li>`;
+    }).join('');
+
     return `
-      <div class="kc-head"><span class="kc-label">${esc(label)}</span><span class="kc-amount-sm">${inr(c.total)}</span></div>
-      <ul class="kc-cats">${cats}</ul>
+      <div class="kc-head"><span class="kc-label">${esc(label)}</span></div>
+      <div class="kc-spend-body">
+        ${svgChart}
+        <ul class="kc-spend-list">${cats}</ul>
+      </div>
       <div class="kc-foot">
         <span>${c.count} purchase${c.count === 1 ? '' : 's'}</span>
         ${c.unbilled != null ? `<span><b>${inr(c.unbilled)}</b> building toward next bill</span>` : ''}
@@ -701,7 +734,21 @@ function bootChat(customer) {
     if (!voiceStatusEl) return;
     if (!text) { voiceStatusEl.hidden = true; voiceStatusEl.innerHTML = ''; return; }
     voiceStatusEl.hidden = false;
-    voiceStatusEl.innerHTML = `<span class="vs-dot ${opts.cls || ''}"></span><span class="vs-text">${esc(text)}</span>`
+    let waveHtml = '';
+    if (opts.cls === 'rec' || opts.cls === 'play' || opts.cls === 'work') {
+      waveHtml = `
+        <div class="voice-wave-bars ${opts.cls}">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      `;
+    } else {
+      waveHtml = `<span class="vs-dot ${opts.cls || ''}"></span>`;
+    }
+    voiceStatusEl.innerHTML = `${waveHtml}<span class="vs-text">${esc(text)}</span>`
       + (opts.stop ? '<button type="button" class="vs-stop">Stop</button>' : '');
     if (opts.stop) voiceStatusEl.querySelector('.vs-stop').onclick = opts.stop;
   }
