@@ -75,6 +75,49 @@ export async function transcribe(
   return { transcript: String(data.transcript ?? '').trim(), languageCode: data.language_code ?? null };
 }
 
+export function detectLanguage(text: string): string {
+  // 1. Script checks (Unicode blocks)
+  if (/[\u0900-\u097F]/.test(text)) {
+    // Devanagari: Hindi or Marathi
+    // If it contains common Marathi words, classify as mr-IN
+    if (/\b(आहे|नाही|आणि|होती|होता|करणे|करून|तर|पण|माहिती)\b/.test(text)) {
+      return 'mr-IN';
+    }
+    return 'hi-IN';
+  }
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN';
+  if (/[\u0A80-\u0AFF]/.test(text)) return 'gu-IN';
+  if (/[\u0A00-\u0A7F]/.test(text)) return 'pa-IN';
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta-IN';
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'te-IN';
+  if (/[\u0C80-\u0CFF]/.test(text)) return 'kn-IN';
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml-IN';
+  if (/[\u0B00-\u0B7F]/.test(text)) return 'od-IN';
+
+  // 2. Hinglish/Latin-script Indian language checks
+  const hinglishWords = [
+    'hai', 'hain', 'aap', 'apna', 'apni', 'apne', 'mera', 'meri', 'mere', 'ko', 'kar', 'karo', 'karke',
+    'karna', 'kijiye', 'krpya', 'kripya', 'diya', 'de', 'do', 'liya', 'le', 'lo', 'nahi', 'nahin', 'na',
+    'raha', 'rahi', 'rahe', 'chahiye', 'tha', 'thi', 'the', 'aur', 'se', 'ka', 'ki', 'ke', 'par', 'bhi',
+    'hi', 'toh', 'to', 'kya', 'kyun', 'kab', 'kahan', 'kaise', 'kon', 'kaun', 'ek', 'do', 'teen', 'chaar',
+    'din', 'mahina', 'saal', 'rupaye', 'rupaya', 'rupaye', 'bhej', 'band', 'chalu', 'dispute', 'transaction',
+    'statement', 'balance', 'outstanding', 'card', 'block', 'unblock', 'limit', 'otp', 'pin', 'waive',
+    'dhanyavaad', 'shukriya', 'namaste', 'namaskar', 'namaskaram', 'vanakkam'
+  ];
+  const words = text.toLowerCase().split(/[^a-z]+/);
+  let matchCount = 0;
+  for (const w of words) {
+    if (hinglishWords.includes(w)) {
+      matchCount++;
+    }
+  }
+  if (matchCount >= 3 || (words.length > 0 && matchCount / words.length > 0.15)) {
+    return 'hi-IN';
+  }
+
+  return 'en-IN';
+}
+
 // Synthesize text to speech using TTS API.
 export async function synthesize(text: string, languageCode?: string | null): Promise<string[]> {
   if (!voiceEnabled()) throw new Error('Voice is not configured.');
@@ -85,7 +128,7 @@ export async function synthesize(text: string, languageCode?: string | null): Pr
     return [silentWavBase64];
   }
 
-  const lang = languageCode && SARVAM_LANGS.has(languageCode) ? languageCode : 'en-IN';
+  const lang = languageCode && SARVAM_LANGS.has(languageCode) ? languageCode : detectLanguage(text);
   const clean = speakable(text);
   if (!clean) return [];
 

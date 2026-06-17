@@ -1,80 +1,158 @@
-# Kriya
+# Kriya: Autonomous Credit-Card Copilot
 
-Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card programs. It lets cardholders manage their accounts, resolve disputes, and configure cards in plain language (or via voice and attachments), while running strict policy gates and updating the bank system-of-record.
-
----
-
-## Core Capabilities
-
-1. **Live System-of-Record Account Access**: Resolves cardholders by their registered mobile number (`/customers/lookup`) and reads balances, credit/cash limits, card status, transactions, statements, unbilled spend, EMIs, benefits, and KYC straight from the Hyperface Credit Stack in real time.
-2. **End-to-End Card Actions**: Blocks/locks, unblocks, hotlists and replaces cards; toggles usage controls (online, POS, contactless, ATM, international); converts purchases or outstanding to EMI and forecloses; posts refunds/chargebacks; manages autopay; and cancels RBI e-mandates, executed against the system of record, each verification- and policy-gated and fully audited.
-3. **Spend Intelligence & SVG Analytics**: Turns live transactions into a plain-language money summary (spend by category, top merchants, largest purchase, and current cycle unbilled balance) along with a dynamic inline SVG Donut Chart rendering the spending category distribution.
-4. **Generative, Visual Answers**: In the web/app chat, Kriya renders clean frosted cards (balance & utilisation, spends breakdown with SVG chart, recent transactions, and tap-to-convert EMI plans) alongside its text reply. Every figure is live; no card is shown when the live read is unavailable.
-5. **Deterministic Policy Gating**: Eligibility for late-fee waivers, credit-limit increases, duplicate-charge refunds, and EMI conversions is computed via strict rules in `services/policy-gates.ts` instead of relying on LLM vibes.
-6. **Support Tickets Kanban Board**: A Jira/Pinterest-style board at `/tickets` (also linked in the navbar) that displays all customer escalations. Support operators can filter and search tickets, open a detail panel to inspect customer profiles, live balances, unbilled transactions, active disputes, and full AI audit logs, and enter resolution notes to mark tickets as resolved in the database.
-7. **Multilingual Voice Mode with Live Waves**: Speak to Kriya in English, Hindi, Hinglish, Tamil, Marathi, Malayalam, Bengali, Telugu, Kannada, Gujarati, or Punjabi via Sarvam integration. Active recording is accompanied by a minimal jumping voice waves animation in the chat input.
-8. **RBI-Compliant Mandate & Dispute Lifecycles**: Fully models RBI e-mandate guidelines (cancellations, AFA-free limits, pre-debit notifications) and structured dispute/chargeback tracking with provisional-credit and resolution SLAs.
-9. **Every Channel, One Brain**: The same agent pipeline serves the web copilot, Telegram (`t.me/kriya_copilot_bot`), and multilingual voice, meaning identity, memory, policy gates, and the audit trail come free on every surface.
-10. **Strict-Live Honesty**: Customer account data is sourced only from the Hyperface system of record.
+Kriya is an autonomous, customer-facing CardOps copilot for modern Indian credit card programs. Built on a durable agentic workflow engine, Kriya enables cardholders to manage accounts, configure controls, convert purchases to EMI, and resolve disputes in plain language (or via voice) while enforcing strict regulatory policy gates.
 
 ---
 
-## Agent Architecture
+## 🛠 Core Capabilities
 
-Each user interaction triggers a durable Flue workflow orchestrating specialized agents:
+Kriya acts as a plain-language translator and execution layer for the **Hyperface Credit Stack**. Below is the complete feature matrix:
 
-```
-[Customer Msg] ──▶  Triage Agent  ──▶ (Investigation Agent ∥ Policy Agent) ──▶ Resolution Agent ──▶ [Card Mutation / Reply]
-```
+### 1. Accounts & Balances
+* **Live Account Summary**: Fetches current ledger balance, available credit, cash limits, and overall card utilization in real time.
+* **Account Records**: Reads product variant metadata, billing cycles, status, and key cardholder dates.
+* **Credit Limit Updates**: Computes eligibility and executes limit increases or decreases.
 
-- **Triage**: Classifies category, urgency, and routing.
-- **Investigation**: Performs read-only forensics against live databases and APIs.
-- **Policy**: Searches the policies database to extract rules and SLAs.
-- **Resolution**: Verifies identity (card last-4; there is no OTP step), runs the deterministic policy gates, renders visual answer cards, and executes card updates directly against the system of record.
+### 2. Card Management & Security
+* **Emergency Operations**: Instantly executes a card lock (reversible freeze) or permanent hotlisting (irreversible disable) during fraud events.
+* **Usage Controls**: Toggles online transactions, physical POS, contactless (tap-to-pay), ATM withdrawals, and international usage instantly.
+* **Replacement Routing**: Places card replacement orders (e.g., damaged or stolen cards) with auto-address verification.
+
+### 3. Transactions & Statements
+* **Dynamic Ledgers**: Queries billed and unbilled transactions over any custom date window.
+* **Statement Access**: Generates statement histories, billing totals, minimum dues, and provides direct PDF document downloads.
+* **Transaction Inquiries**: Inspects specific transaction details by reference ID to answer cardholder queries.
+
+### 4. EMI & Pay Later
+* **Tenure Eligibility**: Checks tenure options, interest rates, and monthly installment options for eligible purchases.
+* **EMI Conversions**: Converts outstanding billing amounts or specific transactions into equated monthly installments.
+* **Early Settle & Foreclose**: Computes foreclosure fees and executes EMI foreclosures against the ledger.
+
+### 5. Rewards & Cashback
+* **Live Points Balance**: Tracks earned, pending, redeemed, and expiring points.
+* **Ledger History**: Inspects point postings associated with specific purchases.
+* **Instant Redemption**: Redeems available reward points directly against the current card balance.
+* **Cashback Activity**: Tracks transaction-level cashback rules and reversals.
+
+### 6. Regulatory Compliance & Support
+* **Fee Waivers**: Auto-waives annual, late, or over-limit fees (governed by RBI compliance limits and credit profiles).
+* **Dispute Lifecycles**: Files and tracks formal disputes/chargebacks within RBI-mandated SLA timelines.
+* **Kanban Operator Dashboard**: A web dashboard at `/tickets` allowing operations teams to review customer escalation histories, live card balances, audit trails, and log notes.
 
 ---
 
-## Project Structure
+## 🧠 Agent Architecture
+
+Kriya coordinates user requests using a durable **Flue Workflow** that routes requests through specialized, cooperating agents:
+
+```mermaid
+graph TD
+    classDef default fill:#fffdf9,stroke:#e8e0d0,stroke-width:2px,color:#1e2033;
+    classDef highlight fill:#e9ebfc,stroke:#4250d5,stroke-width:2px,color:#1e2033;
+    classDef saffron fill:#fdeede,stroke:#f9730c,stroke-width:2px,color:#1e2033;
+    classDef green fill:#e3f1d8,stroke:#496d21,stroke-width:2px,color:#1e2033;
+    
+    User([User Message]) --> Triage[Triage Agent]:::highlight
+    Triage --> |Routing & Urgency| Investigation[Investigation Agent]
+    Triage --> |Policy Analysis| Policy[Policy Agent]
+    
+    Investigation --> |Live Ledger Context| Resolution[Resolution Agent]:::highlight
+    Policy --> |SLA & Limits Rules| Resolution
+    
+    Resolution --> F{Deterministic Policy Gate?}:::saffron
+    F -->|Pass| G[Execute Card Mutation]:::green
+    F -->|Fail| H[Flag & Escalate to Operator]
+    
+    G --> |Hyperface UAT API| I[Ledger Success]
+    H --> |Supabase Database| J[(Support Tickets Board)]
+    I --> J
+    J --> Reply([Reply & Visual Card response])
+```
+
+### Specialized Agents:
+1. **Triage Agent**: Classifies intent, detects urgency, and extracts key entities (e.g. amounts, dates, channels).
+2. **Investigation Agent**: Conducts read-only queries against the database and card ledger APIs to build context.
+3. **Policy Agent**: Matches user requests against deterministic rules (e.g., limit check, maximum waiver policies).
+4. **Resolution Agent**: Enforces identity checks, validates policy gates, compiles visual cards, and triggers ledger modifications.
+
+---
+
+## 📂 Project Directory Structure
 
 ```
-├── app.ts                        # Hono HTTP server (API, Telegram webhooks, and pages)
-├── db.ts                         # Flue persistence database configuration
-├── agents/                       # Specialized AI agents (Triage, Investigation, Policy, Resolution)
-├── channels/                     # Chat channel adapters (Telegram, Hermes)
-├── database/                     # Supabase database queries and client
-├── providers/                    # Hyperface UAT API integration client
-├── services/                     # Business logic (Policy gates, e-mandates, voice, attachments, verification)
-└── workflows/                    # Durable Flue workflow orchestrators
+├── app.ts                        # Hono HTTP Server: handles routing, webhooks, and REST APIs
+├── db.ts                         # Local Flue database persistence settings
+├── agents/                       # Specialized AI agent definitions
+│   ├── triage.ts                 # Intent classifier & router
+│   ├── investigation.ts          # Read-only ledger research agent
+│   ├── policy.ts                 # Policy extraction agent
+│   └── resolution.ts             # Enforcement and mutation agent
+├── channels/                     # Third-party chat channel adapters
+│   ├── telegram.ts               # Telegram webhook verification and message handler
+│   └── hermes.ts                 # Inbound routing and identity matching engine
+├── core/                         # Core platform logic
+│   ├── queries.ts                # Main database access layers (Supabase)
+│   ├── env.ts                    # Hosted guardrails and configuration
+│   └── supabase.ts               # Supabase client credentials wrapper
+├── database/                     # DB schemas and migrations
+├── providers/                    # Core banking / credit ledger integrations
+│   ├── hyperface.ts              # UAT endpoint bindings for the Hyperface Credit Stack
+│   └── hyperface-webhooks.ts     # Inbound event handlers (charge postings, alerts)
+├── services/                     # Business services
+│   ├── policy-gates.ts           # Rules engine for fee waivers, limits, and disputes
+│   ├── verify.ts                 # Identity checking logic
+│   └── voice.ts                  # Voice mode: Sarvam STT & TTS translation
+├── ui/                           # Frontend HTML, CSS, and Client JS
+│   ├── start.html / start.css    # Landing page (sticky navbar, visual Hermes flow)
+│   ├── chat.html / chat.js       # Live chat client with voice wave animations
+│   └── tickets.html / tickets.js # Kanban board for customer service agents
+└── workflows/                    # Durable orchestrations
+    └── chat-turn.ts              # Stateful conversation loop
 ```
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
+* **Node.js** ≥ 22.18
+* **Supabase** instance configured for Kriya schemas
+* **OpenAI API Key** (for general agent reasoning)
+* **Sarvam API Key** (required for Multilingual Voice Mode)
 
-- Node.js ≥ 22.18
-- Supabase credentials
-- OpenAI API Key & Sarvam API Key (for Voice)
-
-### Run Locally
-
-1. Install dependencies:
+### Installation
+1. Clone the repository and install dependencies:
    ```bash
    npm install
    ```
-2. Configure `.env`:
+
+2. Create a `.env` file from the template:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Populate `.env` with your credentials:
    ```env
+   PORT=3583
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=your-supabase-key
-   OPENAI_API_KEY=your-openai-key
-   SARVAM_API_KEY=your-sarvam-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-key
+   OPENAI_API_KEY=your-openai-api-key
+   SARVAM_API_KEY=your-sarvam-voice-api-key
    KRIYA_PROVIDER_MODE=hyperface_uat
    HYPERFACE_SECRET_KEY=your-hyperface-access-secret
-   # Issuer master key - used ONLY for the issuer customer-details API
    HYPERFACE_ISSUER_SECRET_KEY=your-issuer-master-key
    ```
-3. Start the dev server:
-   ```bash
-   npm run dev
-   ```
+
+### Execution
+* **Development Server (Hot reloading)**:
+  ```bash
+  npm run dev
+  ```
+* **Production Build**:
+  ```bash
+  npm run build
+  ```
+* **Production Run**:
+  ```bash
+  npm run start
+  ```

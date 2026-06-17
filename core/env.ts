@@ -14,7 +14,6 @@ export interface KriyaConfig {
   supabaseServiceRoleKey: string | undefined;
   databaseUrl: string | undefined;
   allowLocalFlueSqlite: boolean;
-  evidenceBucket: string | undefined;
   providerMode: 'synthetic' | 'hyperface_uat';
   voiceProvider: 'sarvam' | 'mock';
   /** True only when voice is actually usable (Sarvam key present). */
@@ -93,7 +92,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
     supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY || undefined,
     databaseUrl: env.DATABASE_URL || undefined,
     allowLocalFlueSqlite: flag(env.ALLOW_LOCAL_FLUE_SQLITE, false),
-    evidenceBucket: env.KRIYA_EVIDENCE_BUCKET || undefined,
     providerMode,
     voiceProvider,
     voiceEnabled,
@@ -149,12 +147,7 @@ export function enforceHostedGuardrails(cfg: KriyaConfig = config): void {
         + '(Set ALLOW_LOCAL_FLUE_SQLITE=true only for non-production environments.)',
       );
     }
-    if (!cfg.evidenceBucket && !cfg.allowLocalFlueSqlite) {
-      problems.push(
-        'KRIYA_EVIDENCE_BUCKET is required in deployed mode: evidence uploads must go to Supabase Storage, '
-        + 'not the local filesystem. (Set ALLOW_LOCAL_FLUE_SQLITE=true for non-production environments.)',
-      );
-    }
+
     if (cfg.telegram.botToken && !cfg.telegram.webhookSecret) {
       problems.push(
         'TELEGRAM_WEBHOOK_SECRET is required in deployed mode when TELEGRAM_BOT_TOKEN is set: it '
@@ -171,8 +164,7 @@ export function enforceHostedGuardrails(cfg: KriyaConfig = config): void {
     console.log(
       `[kriya] mode=${cfg.deployed ? 'deployed' : 'development'} provider=${cfg.providerMode} `
       + `voice=${cfg.voiceEnabled ? 'sarvam' : (cfg.voiceProvider === 'mock' ? 'mock-dev' : 'disabled')} `
-      + `flue-state=${cfg.databaseUrl ? 'postgres' : 'local-sqlite'} `
-      + `evidence=${cfg.evidenceBucket ? `supabase:${cfg.evidenceBucket}` : 'local'}`,
+      + `flue-state=${cfg.databaseUrl ? 'postgres' : 'local-sqlite'}`
     );
 }
 

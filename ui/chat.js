@@ -117,9 +117,6 @@ function bootChat(customer) {
   const welcomeEl = document.getElementById('welcome');
   const inputEl = document.getElementById('msg-input');
   const sendBtn = document.getElementById('send-btn');
-  const fileInput = document.getElementById('file-input');
-  const uploadBtn = document.getElementById('upload-btn');
-  const uploadStatus = document.getElementById('upload-status');
   const historyListEl = document.getElementById('history-list');
 
   const firstName = String(customer.name ?? '').split(' ')[0];
@@ -164,6 +161,79 @@ function bootChat(customer) {
     started = false;
   }
 
+  let activeSpeakBtn = null;
+  let activeSpeakAudio = null;
+  let activeSpeakQueue = [];
+
+  function stopActiveSpeak() {
+    if (activeSpeakBtn) {
+      activeSpeakBtn.classList.remove('playing');
+      activeSpeakBtn.classList.remove('loading');
+      activeSpeakBtn = null;
+    }
+    activeSpeakQueue = [];
+    if (activeSpeakAudio) {
+      activeSpeakAudio.pause();
+      activeSpeakAudio.src = '';
+      activeSpeakAudio = null;
+    }
+  }
+
+  async function speakText(text, btnEl) {
+    if (activeSpeakBtn === btnEl) {
+      stopActiveSpeak();
+      return;
+    }
+    stopActiveSpeak();
+    
+    // Stop main microphone playback if active
+    ttsQueue = [];
+    if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; ttsAudio = null; }
+    micBtn?.classList.remove('speaking');
+    if (!recording && typeof setVoiceStatus === 'function') setVoiceStatus('');
+
+    activeSpeakBtn = btnEl;
+    btnEl.classList.add('loading');
+
+    try {
+      const res = await fetch('/api/voice/speak', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (activeSpeakBtn !== btnEl) return;
+      
+      btnEl.classList.remove('loading');
+      if (!res.ok || !data.audios?.length) {
+        stopActiveSpeak();
+        return;
+      }
+
+      activeSpeakQueue = data.audios.slice();
+      btnEl.classList.add('playing');
+      
+      function playNextChunk() {
+        if (activeSpeakBtn !== btnEl) return;
+        if (!activeSpeakQueue.length) {
+          stopActiveSpeak();
+          return;
+        }
+        activeSpeakAudio = new Audio(`data:audio/wav;base64,${activeSpeakQueue.shift()}`);
+        activeSpeakAudio.onended = playNextChunk;
+        activeSpeakAudio.onerror = () => stopActiveSpeak();
+        activeSpeakAudio.play().catch(() => stopActiveSpeak());
+      }
+
+      playNextChunk();
+    } catch (err) {
+      if (activeSpeakBtn === btnEl) {
+        btnEl.classList.remove('loading');
+        stopActiveSpeak();
+      }
+    }
+  }
+
   function addBubble(role, text) {
     hideWelcome();
     const wrap = document.createElement('div');
@@ -172,7 +242,22 @@ function bootChat(customer) {
     bubble.className = `bubble bubble-${role}`;
     if (role === 'assistant') bubble.innerHTML = md(text);
     else bubble.textContent = text;
-    wrap.appendChild(bubble);
+
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'bubble-speak-btn';
+    speakBtn.title = 'Speak message';
+    speakBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+    speakBtn.onclick = () => speakText(bubble.innerText, speakBtn);
+
+    if (role === 'user') {
+      wrap.appendChild(speakBtn);
+      wrap.appendChild(bubble);
+    } else {
+      wrap.appendChild(bubble);
+      wrap.appendChild(speakBtn);
+    }
+
     if (messagesEl) {
       messagesEl.appendChild(wrap);
       scrollDown();
@@ -620,53 +705,6 @@ function bootChat(customer) {
     }
   }
 
-  // ── uploads ─────────────────────────────────────────────────────────
-  function setUploadStatus(text) {
-    if (uploadStatus) {
-      uploadStatus.textContent = text ?? '';
-      uploadStatus.hidden = !text;
-    }
-  }
-
-  if (fileInput) {
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files?.[0];
-      fileInput.value = '';
-      if (!file || busy) return;
-      uploadBtn.disabled = true;
-      setUploadStatus(`Reading ${file.name}…`);
-      try {
-        const dataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error('Could not read file'));
-          reader.readAsDataURL(file);
-        });
-        const res = await fetch(`/api/customer/${customer.id}/attachments`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            filename: file.name, mime_type: file.type,
-            data_url: dataUrl, conversation_id: conversationId,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? 'Upload failed');
-        const label = data.attachment_type === 'statement' ? 'statement' : 'evidence';
-        addBubble('user', `Uploaded ${label}: ${data.filename}`);
-        addBubble('assistant', data.analysis);
-        setUploadStatus('');
-        inputEl.placeholder = 'Ask anything about the uploaded file…';
-        inputEl.focus();
-        loadConversations();
-      } catch (err) {
-        setUploadStatus(err.message || 'Could not analyze this file.');
-      } finally {
-        uploadBtn.disabled = false;
-      }
-    });
-  }
-
   // ── input wiring ────────────────────────────────────────────────────
   function autoResize() {
     if (inputEl) {
@@ -688,9 +726,6 @@ function bootChat(customer) {
   }
   if (sendBtn) {
     sendBtn.onclick = () => send(inputEl.value);
-  }
-  if (uploadBtn) {
-    uploadBtn.onclick = () => fileInput.click();
   }
 
   const newChatBtn = document.getElementById('new-chat-btn');
@@ -831,6 +866,7 @@ function bootChat(customer) {
     if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; ttsAudio = null; }
     micBtn?.classList.remove('speaking');
     if (!recording) setVoiceStatus('');
+    stopActiveSpeak();
   }
 
   async function speakReply(text) {

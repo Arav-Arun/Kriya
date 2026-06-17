@@ -591,31 +591,6 @@ export async function getLastAssistantMessage(customerId: number, conversationId
   return (data ?? null) as Record<string, unknown> | null;
 }
 
-// ── Evidence attachments ─────────────────────────────────────────────
-export async function addAttachment(input: {
-  customer_id: number;
-  filename: string;
-  mime_type: string;
-  byte_size: number;
-  storage_path: string;
-  attachment_type?: string;
-  analysis?: string;
-}) {
-  const { data, error } = await supabase.from('attachments').insert({
-    customer_id: input.customer_id, filename: input.filename, mime_type: input.mime_type,
-    byte_size: input.byte_size, storage_path: input.storage_path,
-    attachment_type: input.attachment_type ?? 'evidence', analysis: input.analysis ?? null,
-    created_at: new Date().toISOString(),
-  }).select('id').single();
-  if (error) throw error;
-  return Number(data.id);
-}
-
-export async function getRecentAttachments(customerId: number, limit = 5) {
-  return rows(supabase.from('attachments')
-    .select('id,filename,mime_type,byte_size,attachment_type,analysis,created_at')
-    .eq('customer_id', customerId).order('created_at', { ascending: false }).limit(limit));
-}
 
 // ── Statements, subscriptions, controls ───────────────────────────────
 export async function getStatements(customerId: number, limit = 12) {

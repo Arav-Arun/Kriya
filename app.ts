@@ -12,17 +12,13 @@ import { fileURLToPath } from 'node:url';
 import {
   getCustomer, getPaymentSummary,
   createConversation, listConversations, getConversation, getMessages, addMessage,
-  renameConversation, deleteConversation, addAttachment,
+  renameConversation, deleteConversation,
   listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
   logAction, getCustomerActionsLog, ProvisioningError,
   resolveEscalation,
 } from './core/queries.ts';
 import { supabase } from './core/supabase.ts';
-import {
-  SUPPORTED_UPLOAD_MIMES, normalizeMimeType, analyzeUpload,
-} from './services/attachments.ts';
-import { evidenceStorage } from './services/storage.ts';
 import { config, enforceHostedGuardrails, updateTelegramConfig } from './core/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
 import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact, KRIYA_TELEGRAM_HELP } from './channels/telegram.ts';
@@ -372,42 +368,6 @@ app.post('/api/customer/:id/conversations/:conversationId/messages', async (c) =
   return c.json({ success: true, conversation_id: activeConversationId });
 });
 
-// ── Uploads (statements and evidence) ─────────────────────────────────
-app.post('/api/customer/:id/attachments', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
-
-  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
-  const filename = String(body?.filename ?? 'upload').trim().slice(0, 120) || 'upload';
-  const dataUrl = String(body?.data_url ?? '');
-  const match = dataUrl.match(/^data:([^;,]*)(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=\r\n]+)$/);
-  if (!match) return c.json({ error: 'Upload a PDF, CSV, TXT, PNG, JPG, or WEBP file.' }, 400);
-
-  const mimeType = normalizeMimeType(match[1] || String(body?.mime_type ?? ''), filename);
-  if (!SUPPORTED_UPLOAD_MIMES.has(mimeType)) {
-    return c.json({ error: 'Upload a statement or evidence file: PDF, CSV, TXT, PNG, JPG, or WEBP.' }, 400);
-  }
-  const bytes = Buffer.from(match[2].replace(/\s/g, ''), 'base64');
-  if (bytes.length > 10 * 1024 * 1024) return c.json({ error: 'File must be under 10 MB.' }, 400);
-
-  const { storagePath } = await evidenceStorage(ROOT).put(filename, mimeType, bytes);
-  const { attachmentType, analysis } = await analyzeUpload(dataUrl, filename, mimeType, bytes);
-  const id = await addAttachment({
-    customer_id: customerId, filename, mime_type: mimeType,
-    byte_size: bytes.length, storage_path: storagePath,
-    attachment_type: attachmentType, analysis,
-  });
-
-  const label = attachmentType === 'statement' ? 'statement' : 'evidence';
-  await addMessage(
-    customerId, 'user',
-    `Uploaded ${label}: ${filename}\nWhat it shows: ${analysis}`,
-    { attachment_id: id, attachment_type: attachmentType, filename },
-    Number(body?.conversation_id ?? 0) || undefined,
-  );
-
-  return c.json({ id, filename, attachment_type: attachmentType, analysis });
-});
 
 // ── Voice (Sarvam STT/TTS) — the chat's voice mode ────────────────────
 // Transcribe a recorded clip → text the chat sends as a turn.

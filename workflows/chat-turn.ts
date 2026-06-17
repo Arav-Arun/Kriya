@@ -8,7 +8,7 @@ import {
   TriageRouting, InvestigationFindings, PolicyFindings,
 } from '../services/schemas.ts';
 import {
-  getCustomer, addMessage, getRecentMessages, getRecentAttachments,
+  getCustomer, addMessage, getRecentMessages,
   getConversation, getActionsSince, createEscalation, getLastAssistantMessage,
 } from '../core/queries.ts';
 import { noteChannelBinding, handleVerificationReply } from '../services/verify.ts';
@@ -70,22 +70,14 @@ export async function run(ctx: FlueContext<Payload>) {
   }
 
   try {
-    // Concurrently fetch recent conversation and attachment context.
-    const [recentMsgs, recentAttachments, lastAssistantMsg] = await Promise.all([
+    // Concurrently fetch recent conversation context.
+    const [recentMsgs, lastAssistantMsg] = await Promise.all([
       getRecentMessages(customerId, 6, activeConversationId),
-      getRecentAttachments(customerId, 4),
       activeConversationId ? getLastAssistantMessage(customerId, activeConversationId) : Promise.resolve(null),
     ]);
     const recent = recentMsgs
-      .map((m) => `${m.role}: ${m.content.slice(0, 300)}`)
+      .map((m: any) => `${m.role}: ${m.content.slice(0, 300)}`)
       .join('\n');
-    const evidence = recentAttachments
-      .map((a: any) => {
-        const kind = a.attachment_type === 'statement' ? 'Statement' : 'Evidence';
-        return `${kind} ${a.id} (${a.filename}, ${a.created_at}): ${String(a.analysis ?? '').slice(0, 800)}`;
-      })
-      .join('\n');
-    const evidenceBlock = evidence ? `\n\nRecent customer-uploaded statements/evidence:\n${evidence}` : '';
 
     let triage: any;
     const lastMeta = lastAssistantMsg && lastAssistantMsg.meta
@@ -114,7 +106,7 @@ export async function run(ctx: FlueContext<Payload>) {
         const harness = await ctx.init(triageAgent, { name: 'triage' });
         const session = await harness.session();
         const res = await session.prompt(
-          `Route this customer chat turn.\n\nLatest message:\n${message}\n\nRecent conversation:\n${recent || '(start of conversation)'}${evidenceBlock}`,
+          `Route this customer chat turn.\n\nLatest message:\n${message}\n\nRecent conversation:\n${recent || '(start of conversation)'}`,
           { result: TriageRouting },
         );
         return res.data;
@@ -127,7 +119,7 @@ export async function run(ctx: FlueContext<Payload>) {
     } | null = null;
 
     if (triage.route === 'analysis') {
-      const issue = `Customer ID: ${customerId} (${customer.name})\nIssue category: ${triage.category}\nCustomer message:\n${message}${evidenceBlock}`;
+      const issue = `Customer ID: ${customerId} (${customer.name})\nIssue category: ${triage.category}\nCustomer message:\n${message}`;
 
       const [investigation, policy] = await Promise.all([
         stage('investigation', 'Investigation', async () => {
@@ -162,8 +154,8 @@ export async function run(ctx: FlueContext<Payload>) {
       const harness = await ctx.init(resolutionAgent, { name: `chat-${customerId}` });
       const session = await harness.session();
       const prompt = analysis
-        ? `Customer message:\n${message}${evidenceBlock}\n\nSpecialist analysis (from real account data; trust it):\n${JSON.stringify(analysis, null, 2)}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`
-        : `Customer message:\n${message}${evidenceBlock}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`;
+        ? `Customer message:\n${message}\n\nSpecialist analysis (from real account data; trust it):\n${JSON.stringify(analysis, null, 2)}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`
+        : `Customer message:\n${message}\n\n${channelNote}${verificationNote}\nCustomer ID for tool calls: ${customerId}`;
       const res = await session.prompt(prompt);
       return res.text;
     });
