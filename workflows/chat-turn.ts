@@ -14,7 +14,7 @@ import {
 import {
   getCustomer, addMessage, getRecentMessages, getRecentAttachments,
   getConversation, getActionsSince, createEscalation, getLastAssistantMessage,
-} from '../database/queries.ts';
+} from '../core/queries.ts';
 import { noteChannelBinding, handleVerificationReply } from '../services/verify.ts';
 
 interface Payload {
@@ -49,14 +49,17 @@ export async function run(ctx: FlueContext<Payload>) {
   // Deterministic identity-factor handling, BEFORE the agent runs. If the
   // customer replied with a code, the workflow verifies it itself — security
   // factor routing must not hinge on a small model picking the right tool.
-  const verification = await handleVerificationReply(customerId, message);
+  // This and the conversation lookup are independent, so run them together to
+  // shave a DB round-trip off the front of every turn.
+  const [verification, conv] = await Promise.all([
+    handleVerificationReply(customerId, message),
+    requestedConversationId ? getConversation(customerId, requestedConversationId) : Promise.resolve(null),
+  ]);
   const verificationNote = verification.handled
     ? `\nIdentity update (handled deterministically just now): ${verification.note} Do NOT re-ask for this factor — call get_verification_status and continue the customer's pending request.`
     : '';
 
-  const conversationId = requestedConversationId && await getConversation(customerId, requestedConversationId)
-    ? requestedConversationId
-    : undefined;
+  const conversationId = requestedConversationId && conv ? requestedConversationId : undefined;
 
   const turnStartedAt = new Date().toISOString();
   const activeConversationId = await addMessage(customerId, 'user', message, null, conversationId);
@@ -76,10 +79,17 @@ export async function run(ctx: FlueContext<Payload>) {
   }
 
   try {
-    const recent = (await getRecentMessages(customerId, 6, activeConversationId))
+    // These three reads are mutually independent — fetch them concurrently
+    // rather than in series so the agent pipeline starts sooner.
+    const [recentMsgs, recentAttachments, lastAssistantMsg] = await Promise.all([
+      getRecentMessages(customerId, 6, activeConversationId),
+      getRecentAttachments(customerId, 4),
+      activeConversationId ? getLastAssistantMessage(customerId, activeConversationId) : Promise.resolve(null),
+    ]);
+    const recent = recentMsgs
       .map((m) => `${m.role}: ${m.content.slice(0, 300)}`)
       .join('\n');
-    const evidence = (await getRecentAttachments(customerId, 4))
+    const evidence = recentAttachments
       .map((a: any) => {
         const kind = a.attachment_type === 'statement' ? 'Statement' : 'Evidence';
         return `${kind} ${a.id} (${a.filename}, ${a.created_at}): ${String(a.analysis ?? '').slice(0, 800)}`;
@@ -88,7 +98,6 @@ export async function run(ctx: FlueContext<Payload>) {
     const evidenceBlock = evidence ? `\n\nRecent customer-uploaded statements/evidence:\n${evidence}` : '';
 
     let triage: any;
-    const lastAssistantMsg = activeConversationId ? await getLastAssistantMessage(customerId, activeConversationId) : null;
     const lastMeta = lastAssistantMsg && lastAssistantMsg.meta
       ? (typeof lastAssistantMsg.meta === 'string' ? JSON.parse(lastAssistantMsg.meta) : lastAssistantMsg.meta)
       : null;

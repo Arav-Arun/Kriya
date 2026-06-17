@@ -2,13 +2,17 @@
 // Base URL and versioning set via configs. Live endpoints: customers/lookup, accounts/{id}/summary.
 // See Credit Stack spec: https://hyperface.stoplight.io/docs/credit-stack-apis
 import { randomUUID } from 'node:crypto';
-import { config } from '../config/env.ts';
+import { config } from '../core/env.ts';
 import type {
   CardProvider, ProviderResult, ProviderErrorCode,
   LiveCustomerMatch, LiveAccountSummary, LiveTransactionFilters, MutationOptions,
 } from './types.ts';
 
-const TIMEOUT_MS = 25_000;
+// Successful UAT calls return in well under 3s; the old 25s cap only ever
+// applied to calls that were going to fail (e.g. gateway 504s on PAN lookup),
+// where it added up to 25s of dead wait onto the chat hot path. 15s keeps
+// ample headroom for a genuinely slow response while failing fast otherwise.
+const TIMEOUT_MS = 15_000;
 
 function errCode(status: number): ProviderErrorCode {
   if (status === 401) return 'AUTH';
@@ -182,17 +186,6 @@ export const hyperfaceProvider: CardProvider = {
   debitTransaction: (input, o) => call('/accounts/createDebitTransaction', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   creditTransaction: (input, o) => call('/accounts/createCreditTransaction', { method: 'POST', body: input, idempotencyKey: idem(o) }),
 
-  // Nudges endpoints
-  // The /dmon/ service authenticates differently from the Credit Stack apikey
-  // scheme and requires a JSON content-type; both are supplied by call().
-  nudges: (accountId, opts) => {
-    const params = new URLSearchParams();
-    if (opts?.channel) params.set('channel', opts.channel);
-    if (opts?.count != null) params.set('count', String(opts.count));
-    const qs = params.size ? `?${params}` : '';
-    return call(`/dmon/nudges/account/${accountId}${qs}`, { method: 'GET' });
-  },
-
   // EMI endpoints
   emiConfig: (accountId, q) => {
     // GET /accounts/emi?accountId=&amount=|txnRefId=&emiType=. The provider
@@ -210,7 +203,10 @@ export const hyperfaceProvider: CardProvider = {
   foreclosureDetails: (input) => call(`/accounts/${input.accountId}/emi/foreclosureDetails`, { method: 'POST', body: input }),
 
   // Benefits endpoints
-  fetchBenefits: (input) => call('/benefits/fetch', { method: 'POST', body: input }),
+  // /benefits/fetch requires programId (400 "Program Id cannot be blank/null"
+  // otherwise); default it from config so account-scoped callers need only pass
+  // accountId. Returns the program's benefit catalogue scoped to the account.
+  fetchBenefits: (input) => call('/benefits/fetch', { method: 'POST', body: { programId: config.hyperface.programId, ...input } }),
   fetchBenefitsByProgram: (input) => call('/dmon/benefits/pwa/program', { method: 'POST', body: { programId: input.programId ?? config.hyperface.programId } }),
   subscribeBenefit: (input, o) => call('/benefits/subscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
   unsubscribeBenefit: (input, o) => call('/benefits/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
@@ -218,9 +214,12 @@ export const hyperfaceProvider: CardProvider = {
   // Rewards endpoints
   createRewardsAccount: (accountId) => call('/smartBenefit/rewards/createRewardsAccount', { method: 'POST', body: { accountId } }),
   rewardsSummary: (accountId) => call('/rewards/summary', { method: 'POST', body: { accountId }, apiKey: config.hyperface.issuerSecretKey }),
-  rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId } }),
-  creditRewardPoints: (input, o) => call('/rewards/credit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  debitRewardPoints: (input, o) => call('/rewards/debit', { method: 'POST', body: input, idempotencyKey: idem(o) }),
+  rewardsLedger: (accountId) => call('/rewards/ledger', { method: 'POST', body: { accountId }, apiKey: config.hyperface.issuerSecretKey }),
+  // The rewards engine names the quantity `rewardAmount` (the API rejects
+  // `points` with "rewardAmount must not be null"); map it here so callers keep
+  // the friendlier `points`.
+  creditRewardPoints: ({ points, ...rest }, o) => call('/rewards/credit', { method: 'POST', body: { ...rest, rewardAmount: points }, apiKey: config.hyperface.issuerSecretKey, idempotencyKey: idem(o) }),
+  debitRewardPoints: ({ points, ...rest }, o) => call('/rewards/debit', { method: 'POST', body: { ...rest, rewardAmount: points }, apiKey: config.hyperface.issuerSecretKey, idempotencyKey: idem(o) }),
   expiringRewards: (input) => call('/rewards/fetchExpiringRewardTransactions', { method: 'POST', body: input }),
   rewardAccount: (input) => call('/rewards/accountDetails', { method: 'POST', body: input }),
   rewardTransactions: (input) => call('/rewards/fetchRewardTransactions', { method: 'POST', body: input }),

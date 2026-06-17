@@ -3,7 +3,7 @@
 // analytics, customer search, and the conversation list are server-side RPC
 // functions (see migrations); the rest use the query builder, with small
 // per-customer aggregations computed in JS.
-import { supabase } from './client.ts';
+import { supabase } from './supabase.ts';
 
 // ── Small helpers ─────────────────────────────────────────────────────
 async function rows<T = Record<string, unknown>>(query: PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {

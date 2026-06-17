@@ -2,8 +2,8 @@
 // Calls:
 // - POST https://api.sarvam.ai/speech-to-text
 // - POST https://api.sarvam.ai/text-to-speech
-import { config } from '../config/env.ts';
-import { supabase } from '../database/client.ts';
+import { config } from '../core/env.ts';
+import { supabase } from '../core/supabase.ts';
 
 const STT_URL = 'https://api.sarvam.ai/speech-to-text';
 const TTS_URL = 'https://api.sarvam.ai/text-to-speech';

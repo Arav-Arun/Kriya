@@ -1,50 +1,50 @@
-import { esc, md, inr, fmtWhen, daysUntil, wavFromBlob } from '../shared/utils.js';
+import { esc, md, inr, fmtWhen, daysUntil, wavFromBlob } from './utils.js';
 const ACTION_RENDER = {
-  fee_waived: (d) => ['green', `Fee waived — ${inr(d?.amount)} ${String(d?.fee_type ?? '').replace(/_/g, ' ')} reversed`, d?.new_outstanding_total != null ? `Outstanding is now ${inr(d.new_outstanding_total)}` : ''],
-  refund_initiated: (d) => ['green', `Refund credited — ${inr(d?.amount)} from ${d?.merchant ?? 'merchant'}`, d?.new_available_limit != null ? `Available limit is now ${inr(d.new_available_limit)}` : ''],
+  fee_waived: (d) => ['green', `Fee waived: ${inr(d?.amount)} ${String(d?.fee_type ?? '').replace(/_/g, ' ')} reversed`, d?.new_outstanding_total != null ? `Outstanding is now ${inr(d.new_outstanding_total)}` : ''],
+  refund_initiated: (d) => ['green', `Refund credited: ${inr(d?.amount)} from ${d?.merchant ?? 'merchant'}`, d?.new_available_limit != null ? `Available limit is now ${inr(d.new_available_limit)}` : ''],
   refund_rejected: (d) => ['red', 'Refund not possible', d?.reason ?? ''],
   card_blocked: (d) => ['red', 'Card blocked', d?.reason ?? ''],
   card_unblocked: () => ['green', 'Card unblocked', 'Your card is active again'],
   card_hotlisted: () => ['red', 'Card permanently disabled', 'A replacement will be arranged'],
   international_toggled: (d) => ['blue', `International usage ${d?.enabled ? 'enabled' : 'disabled'}`, ''],
-  emi_converted: (d) => ['blue', `EMI created — ${inr(d?.amount)} over ${d?.tenure} months`, `${inr(d?.emi_amount)}/month`],
+  emi_converted: (d) => ['blue', `EMI created: ${inr(d?.amount)} over ${d?.tenure} months`, `${inr(d?.emi_amount)}/month`],
   emi_foreclosed: (d) => ['blue', 'EMI foreclosed', `Total payable ${inr((d?.remaining_principal ?? 0) + (d?.foreclosure_charge ?? 0))}`],
   rewards_redeemed: (d) => ['green', `${Number(d?.points ?? 0).toLocaleString('en-IN')} points redeemed`, `${inr(d?.value_inr)} statement credit`],
-  credit_limit_adjusted: (d) => ['green', 'Credit limit increased', `${inr(d?.old_limit)} → ${inr(d?.new_limit)}`],
+  credit_limit_adjusted: (d) => ['green', 'Credit limit increased', `${inr(d?.old_limit)} to ${inr(d?.new_limit)}`],
   card_closure_initiated: () => ['amber', 'Card closure initiated', 'Confirmation within 7 working days'],
-  escalation_created: (d) => ['amber', `Sent for specialist review — ${d?.escalation_id ?? ''}`, 'A specialist will take it from here'],
+  escalation_created: (d) => ['amber', `Sent for specialist review: ${d?.escalation_id ?? ''}`, 'A specialist will take it from here'],
   context_recorded: () => ['blue', 'Account details saved', ''],
-  transaction_recorded: (d) => ['blue', `Transaction noted — ${d?.merchant ?? ''} ${inr(d?.amount)}`, ''],
+  transaction_recorded: (d) => ['blue', `Transaction noted: ${d?.merchant ?? ''} ${inr(d?.amount)}`, ''],
   card_control_updated: (d) => ['blue', `${String(d?.control ?? '').replace('_enabled', '').replace(/_/g, ' ')} transactions ${d?.enabled ? 'enabled' : 'disabled'}`, 'Card control updated'],
   autopay_updated: (d) => ['blue', `Autopay ${d?.enabled ? 'enabled' : 'disabled'}`, d?.enabled ? `Will pay the ${d?.mode === 'total_due' ? 'full statement' : 'minimum due'} automatically` : ''],
-  dispute_raised: (d) => ['amber', `Dispute raised — ${d?.dispute_id ?? ''} · ${inr(d?.amount)} at ${d?.merchant ?? 'merchant'}`, 'Provisional credit within 7 working days; resolution in 30–45 days per RBI'],
-  subscription_cancelled: (d) => ['green', `Subscription cancelled — ${d?.merchant ?? ''} ${inr(d?.amount)}/${d?.billing_cycle === 'annual' ? 'yr' : 'mo'}`, 'Autopay mandate revoked — no further charges to your card'],
+  dispute_raised: (d) => ['amber', `Dispute raised: ${d?.dispute_id ?? ''} · ${inr(d?.amount)} at ${d?.merchant ?? 'merchant'}`, 'Provisional credit within 7 working days; resolution in 30 to 45 days per RBI'],
+  subscription_cancelled: (d) => ['green', `Subscription cancelled: ${d?.merchant ?? ''} ${inr(d?.amount)}/${d?.billing_cycle === 'annual' ? 'yr' : 'mo'}`, 'Autopay mandate revoked, no further charges to your card'],
 };
 
 // Starter prompts, paged (3×3 grid per page) so the welcome stays compact while
-// covering the full surface — reads, spend insights, and the write actions Kriya
+// covering the full surface: reads, spend insights, and the write actions Kriya
 // can take.
 const SUGGESTION_PAGES = [
   [
     'Check my outstanding balance',
+    'How many reward points do I have?',
     'Where did my money go this month?',
     'Show my recent transactions',
+    'How much cashback have I earned?',
     "What's on my latest statement?",
-    'Is my card active or blocked?',
     'What are my EMI options?',
+    'What perks does my card have?',
+    'Is my card active or blocked?',
+  ],
+  [
     'Block my card',
     'Help me dispute a wrong charge',
     'Convert my outstanding to EMI',
-  ],
-  [
     'Waive my late fee',
     'Increase my credit limit',
     'Set up autopay',
     'Turn off international usage',
-    'Disable online (card-not-present) payments',
     'Cancel a subscription',
-    'What perks does my card have?',
-    'Show my active EMIs',
     'What autopays are active?',
   ],
 ];
@@ -685,7 +685,7 @@ function bootChat(customer) {
     }
   }
 
-  // ── voice mode (Sarvam STT in, TTS out) — ChatGPT-style mic ──────────
+  // voice mode (Sarvam STT in, TTS out), ChatGPT-style mic
   const micBtn = document.getElementById('mic-btn');
   const voiceStatusEl = document.getElementById('voice-status');
   let mediaRecorder = null;

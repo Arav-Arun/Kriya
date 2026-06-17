@@ -8,8 +8,8 @@ import {
   initiateRefund, createEscalation, logAction,
   setAutopay, toggleInternational, setCardControl,
   getDisputes, createDispute, getSubscriptions, cancelSubscription,
-} from '../database/queries.ts';
-import { supabase } from '../database/client.ts';
+} from '../core/queries.ts';
+import { supabase } from '../core/supabase.ts';
 import { searchPolicies } from './knowledge.ts';
 import {
   toEMandate, buildCancellationReceipt,

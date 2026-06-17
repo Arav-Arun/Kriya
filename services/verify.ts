@@ -24,7 +24,7 @@
 // State is in-memory (UAT/demo scale); the audit trail in actions_log is the
 // durable record.
 import { defineTool, Type } from '@flue/runtime';
-import { getCustomer, logAction } from '../database/queries.ts';
+import { getCustomer, logAction } from '../core/queries.ts';
 
 // Verification state stores
 

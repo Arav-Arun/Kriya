@@ -2,8 +2,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { supabase } from '../database/client.ts';
-import { config } from '../config/env.ts';
+import { supabase } from '../core/supabase.ts';
+import { config } from '../core/env.ts';
 
 export interface StoredObject {
   storagePath: string;

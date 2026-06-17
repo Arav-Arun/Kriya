@@ -2,7 +2,7 @@
 // Handles inbound webhook verification, phone number binding, and outbound messaging.
 // Calls: POST https://api.telegram.org/bot<token>/sendMessage
 import { timingSafeEqual } from 'node:crypto';
-import { config } from '../config/env.ts';
+import { config } from '../core/env.ts';
 import { phoneKey } from './types.ts';
 import type { ChannelAdapter, OutboundDelivery } from './types.ts';
 

@@ -1,7 +1,7 @@
 // Hermes dispatcher: maps inbound channel messages to the Flue workflow, persists messages, and routes replies.
-import { supabase } from '../database/client.ts';
-import { config } from '../config/env.ts';
-import { createCustomerFromLive, ProvisioningError } from '../database/queries.ts';
+import { supabase } from '../core/supabase.ts';
+import { config } from '../core/env.ts';
+import { createCustomerFromLive, ProvisioningError } from '../core/queries.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 import { invalidateLiveBinding } from '../services/provider-tools.ts';
 import { phoneKey } from './types.ts';

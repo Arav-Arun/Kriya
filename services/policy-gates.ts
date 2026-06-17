@@ -13,7 +13,7 @@ import { defineTool, Type } from '@flue/runtime';
 import {
   getCustomer, getTransactions, getPaymentHistory, getPaymentSummary,
   getUnwaivedFees, getRecentWaivers, getDisputes, getActiveEmis, getSubscriptions,
-} from '../database/queries.ts';
+} from '../core/queries.ts';
 
 interface PolicyVerdict {
   decision: string;

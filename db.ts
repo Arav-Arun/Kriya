@@ -1,6 +1,6 @@
 import { sqlite } from '@flue/runtime/node';
 import { postgres } from '@flue/postgres';
-import { config } from './config/env.ts';
+import { config } from './core/env.ts';
 
 // Flue runtime state: agent sessions, submissions, workflow runs and events.
 // Hosted Postgres (DATABASE_URL) in deployed environments; SQLite is a

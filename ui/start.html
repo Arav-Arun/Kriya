@@ -4,25 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kriya · Credit-card copilot on every channel</title>
-<meta name="description" content="Kriya answers card and bill questions, checks the live account, and only takes the actions you allow. It works on Telegram, the web and voice, and every action is logged.">
-<link rel="stylesheet" href="/assets/shared/kriya.css">
-<link rel="stylesheet" href="/assets/shared/start.css">
+<meta name="description" content="Kriya answers card and bill questions, checks the live account, and only takes the actions you allow.">
+<link rel="stylesheet" href="/assets/kriya.css">
+<link rel="stylesheet" href="/assets/start.css">
 </head>
 <body class="k-body">
 
 <nav class="nav">
   <a href="/" class="brand">
-    <img src="/assets/kriya-logo.png" width="32" height="32" alt="Kriya" class="brand-logo">
+    <img src="/assets/assets/kriya-logo.png" width="32" height="32" alt="Kriya" class="brand-logo">
     Kriya
   </a>
+  <div class="nav-links">
+    <a href="#capabilities">Capabilities</a>
+    <a href="#channels">Channels</a>
+    <a href="/chat" class="nav-cta">Open chat</a>
+  </div>
 </nav>
 
 <main class="wrap">
   <section class="hero">
     <h1>Card help, wherever your<br>customers already are.</h1>
     <p>Kriya answers card and bill questions, checks the live account, and only takes the
-       actions you allow. It meets your customers on Telegram, the web and voice,
-       and everything it does is logged.</p>
+       actions you allow.</p>
     <div class="cta">
       <a class="btn" href="/chat">Chat on the web
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -33,9 +37,7 @@
   <section id="capabilities" class="caps">
     <div class="sec-head">
       <h2>Everything Kriya can handle</h2>
-      <p>Kriya turns the full Hyperface Credit Stack into plain-language actions. Ask in your own
-         words on any channel — it checks the live account, answers in plain language (often with a
-         clean visual card), verifies it's really you before anything risky, and gets it done.</p>
+      <p>Kriya turns the  Hyperface Credit Stack into plain language agentic actions. Ask in your own words on any channel. It checks the live account, answers in plain language , verifies it's really you before anything risky, and gets it done.</p>
     </div>
 
     <div class="api-index">
@@ -97,6 +99,20 @@
 
       <article class="api-group">
         <div class="api-group-head">
+          <span class="api-dot" style="background: var(--saffron-2)"></span>
+          <h3>Rewards & Cashback</h3>
+        </div>
+        <ul class="api-list">
+          <li><strong>Reward Points</strong>: live points balance, including earned, redeemed, expired, and what's available</li>
+          <li><strong>Reward Ledger</strong>: every points posting and the transaction or benefit that earned it</li>
+          <li><strong>Redeem Points</strong>: redeem available reward points against the account</li>
+          <li><strong>Cashback Summary</strong>: cashback earned, accrued, and reversed on your card</li>
+          <li><strong>Cashback Activity</strong>: cashback per transaction, and why a charge did or didn't earn it</li>
+        </ul>
+      </article>
+
+      <article class="api-group">
+        <div class="api-group-head">
           <span class="api-dot" style="background: var(--ink)"></span>
           <h3>Disputes, Fees & Escalations</h3>
         </div>
@@ -110,13 +126,13 @@
         </ul>
       </article>
 
-      <article class="api-group">
+      <article class="api-group api-group--wide">
         <div class="api-group-head">
           <span class="api-dot" style="background: var(--indigo)"></span>
           <h3>Insights & Experience</h3>
         </div>
         <ul class="api-list">
-          <li><strong>Spend Insights</strong>: where your money goes — category breakdown, biggest purchase, and the bill building this cycle</li>
+          <li><strong>Spend Insights</strong>: where your money goes, with a category breakdown, biggest purchase, and the bill building this cycle</li>
           <li><strong>Visual Answers</strong>: balance, transactions and EMI plans rendered as clean cards right in the chat</li>
           <li><strong>Benefits & Perks</strong>: lounge access, insurance, and partner offers on your card</li>
           <li><strong>Voice, Your Language</strong>: ask in Hindi, Hinglish, or English and hear the answer back</li>
@@ -224,6 +240,11 @@
       </div>
     </div>
   </section>
+
+  <footer class="foot">
+    <span class="serif">Kriya</span>
+    <span>Autonomous CardOps copilot · built on the Hyperface Credit Stack</span>
+  </footer>
 </main>
 
 <script type="module">

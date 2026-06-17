@@ -13,10 +13,10 @@
 // *inspection* (get_live_account_link) can report "no real match" without the
 // provider lookup, and is otherwise inert for reads.
 import { defineTool, Type } from '@flue/runtime';
-import { config } from '../config/env.ts';
+import { config } from '../core/env.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 import type { ProviderResult } from '../providers/types.ts';
-import { getCustomer, logAction } from '../database/queries.ts';
+import { getCustomer, logAction } from '../core/queries.ts';
 import { phoneKey } from '../channels/types.ts';
 import { assertActionAllowed } from './verify.ts';
 
@@ -284,25 +284,61 @@ export const getLiveCashbackTool = defineTool({
 export const getLiveRewardsSummaryTool = defineTool({
   name: 'get_live_rewards_summary',
   description:
-    'LIVE provider data: reward points summary for the account (available, pending, accrued, redeemed, expired points).',
+    'LIVE provider data: reward points balance (available, earned, redeemed, expired) for the account. Use for "how many reward points do I have".',
   parameters: Type.Object({ customer_id: Type.Number() }),
   execute: async ({ customer_id }) =>
     withBinding(Number(customer_id), async (b) => {
-      await hyperfaceProvider.createRewardsAccount(b.accountId);
-      return hyperfaceProvider.rewardsSummary(b.accountId);
+      // The provider's /rewards/summary aggregate is unreliable in this program
+      // (it findUnique's over multiple reward-account rows and 400/500s), so the
+      // balance is derived from the reward-transactions ledger — the single
+      // source of truth that actually returns data here.
+      const tx = await hyperfaceProvider.rewardTransactions({ accountId: b.accountId });
+      if (!tx.ok) return tx;
+      const rows: Array<Record<string, unknown>> =
+        Array.isArray((tx.data as any)?.data) ? (tx.data as any).data : [];
+      let earned = 0, redeemed = 0, expired = 0, reversed = 0;
+      for (const r of rows) {
+        const p = Number(r.points) || 0;
+        switch (String(r.recordType).toUpperCase()) {
+          case 'EARNED': earned += p; break;
+          case 'REDEEMED': redeemed += p; break;
+          case 'EXPIRED': expired += p; break;
+          case 'REVERSED': reversed += p; break;
+        }
+      }
+      const totalCount = Number((tx.data as any)?.totalCount ?? rows.length);
+      return {
+        ok: true as const,
+        source: 'hyperface' as const,
+        data: {
+          unit: 'points',
+          available: earned - redeemed - expired - reversed,
+          earned, redeemed, expired, reversed,
+          derived_from: 'reward_transactions',
+          counted: rows.length,
+          total_count: totalCount,
+          partial: rows.length < totalCount,
+        },
+      };
     }),
 });
 
 export const getLiveRewardsLedgerTool = defineTool({
   name: 'get_live_rewards_ledger',
   description:
-    'LIVE provider data: the reward-points ledger — per-entry earn/redeem/expiry lines behind the balance. Use for "why didn\'t I get points for this transaction / where did my points go" questions.',
-  parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) =>
-    withBinding(Number(customer_id), async (b) => {
-      await hyperfaceProvider.createRewardsAccount(b.accountId);
-      return hyperfaceProvider.rewardsLedger(b.accountId);
-    }),
+    'LIVE provider data: the reward-points ledger — per-entry earn/redeem/expiry postings behind the balance (points, narration, recordType, posting date, sourcing transaction/benefit). Use for "why didn\'t I get points for this transaction / where did my points go" questions.',
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    from: Type.Optional(Type.String({ description: 'yyyy-mm-dd' })),
+    to: Type.Optional(Type.String({ description: 'yyyy-mm-dd' })),
+  }),
+  execute: async ({ customer_id, from, to }) =>
+    withBinding(Number(customer_id), (b) =>
+      hyperfaceProvider.rewardTransactions({
+        accountId: b.accountId,
+        from: from ? String(from) : undefined,
+        to: to ? String(to) : undefined,
+      })),
 });
 
 
@@ -438,6 +474,15 @@ export const liveUnlockCardTool = defineTool({
       (cardId) => hyperfaceProvider.unlockCard(cardId)),
 });
 
+/** The hotlist endpoint only accepts these reason codes; map free-text to one. */
+function hotlistReasonEnum(text: string): 'FRAUD' | 'CARDLOST' | 'CARDSTOLEN' | 'DAMAGED' {
+  const t = text.toLowerCase();
+  if (/fraud|unauthor|scam|phish/.test(t)) return 'FRAUD';
+  if (/stol|theft|snatch/.test(t)) return 'CARDSTOLEN';
+  if (/damag|broke|crack|bent|chip|water/.test(t)) return 'DAMAGED';
+  return 'CARDLOST';
+}
+
 export const liveHotlistCardTool = defineTool({
   name: 'live_hotlist_card',
   description:
@@ -448,7 +493,7 @@ export const liveHotlistCardTool = defineTool({
   }),
   execute: async ({ customer_id, reason }) =>
     gatedCardAction(Number(customer_id), 'live_hotlist_card', String(reason),
-      (cardId) => hyperfaceProvider.hotlistCard(cardId, String(reason))),
+      (cardId) => hyperfaceProvider.hotlistCard(cardId, hotlistReasonEnum(String(reason)))),
 });
 
 export const liveReplaceCardTool = defineTool({
@@ -551,7 +596,8 @@ export const liveCreateEmiTool = defineTool({
       (b) => hyperfaceProvider.createEmi({
         accountId: b.accountId,
         amount: Number(amount),
-        tenure: Number(tenure_months),
+        // The provider names the tenure `tenureInMonths` (rejects `tenure`).
+        tenureInMonths: Number(tenure_months),
         ...(txn_ref_id ? { txnRefId: String(txn_ref_id) } : {}),
       })),
 });
@@ -563,16 +609,21 @@ export const liveForecloseEmiTool = defineTool({
   parameters: Type.Object({
     customer_id: Type.Number(),
     emi_ref_id: Type.String({ description: 'Provider EMI plan ref id (from get_live_emis)' }),
-    interest_charged: Type.Optional(Type.Number({ description: 'Interest already charged, if known' })),
+    interest_mode: Type.Optional(Type.String({ description: 'How foreclosure interest is charged: MONTHLY | PER_DIEM | NONE (default PER_DIEM)' })),
   }),
-  execute: async ({ customer_id, emi_ref_id, interest_charged }) =>
-    gatedAccountAction(Number(customer_id), 'live_foreclose_emi',
-      { emi_ref_id: String(emi_ref_id), interest_charged: interest_charged != null ? Number(interest_charged) : null },
+  execute: async ({ customer_id, emi_ref_id, interest_mode }) => {
+    // The provider requires interestCharged as an enum, not an amount.
+    const m = String(interest_mode ?? '').toUpperCase();
+    const mode: 'MONTHLY' | 'PER_DIEM' | 'NONE' =
+      m === 'MONTHLY' || m === 'NONE' ? m : 'PER_DIEM';
+    return gatedAccountAction(Number(customer_id), 'live_foreclose_emi',
+      { emi_ref_id: String(emi_ref_id), interest_mode: mode },
       (b) => hyperfaceProvider.forecloseEmi({
         accountId: b.accountId,
         emiRefId: String(emi_ref_id),
-        interestCharged: Number(interest_charged ?? 0),
-      })),
+        interestCharged: mode,
+      }));
+  },
 });
 
 // Core records tools (get_transactions, get_statements, get_reward_points,

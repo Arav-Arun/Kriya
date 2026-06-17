@@ -1,6 +1,6 @@
 // Inbound Hyperface event webhooks. Validates custom auth headers and routes proactive alerts.
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { config } from '../config/env.ts';
+import { config } from '../core/env.ts';
 import { hyperfaceProvider } from './hyperface.ts';
 import type { ProviderResult } from './types.ts';
 

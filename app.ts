@@ -2,8 +2,8 @@
 // the channel webhooks (WhatsApp / Telegram / OpenClaw / Hyperface), voice (Sarvam), and
 // the Flue mount (workflow dispatch + run event streams). Routing only — all
 // analysis lives in the agents/services. Customer data goes through
-// src/database/queries.ts (Supabase) and, for phone-linked customers, live
-// through the card provider (src/providers/hyperface.ts).
+// database/queries.ts (Supabase) and, for phone-linked customers, live
+// through the card provider (providers/hyperface.ts).
 import { Hono } from 'hono';
 import { flue } from '@flue/runtime/routing';
 import { readFileSync } from 'node:fs';
@@ -16,12 +16,12 @@ import {
   listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
   logAction, getCustomerActionsLog, ProvisioningError,
-} from './database/queries.ts';
+} from './core/queries.ts';
 import {
   SUPPORTED_UPLOAD_MIMES, normalizeMimeType, analyzeUpload,
 } from './services/attachments.ts';
 import { evidenceStorage } from './services/storage.ts';
-import { config, enforceHostedGuardrails, updateTelegramConfig } from './config/env.ts';
+import { config, enforceHostedGuardrails, updateTelegramConfig } from './core/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
 import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact, KRIYA_TELEGRAM_HELP } from './channels/telegram.ts';
 import { handleInbound, notifyCustomer, customerIdByPhone, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
@@ -34,10 +34,10 @@ import {
 
 enforceHostedGuardrails();
 
-import type { Customer } from './database/queries.ts';
+import type { Customer } from './core/queries.ts';
 
 const app = new Hono();
-const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../ui');
+const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './ui');
 const ROOT = process.cwd();
 
 const MIME: Record<string, string> = {
@@ -69,7 +69,7 @@ function serveFile(file: string) {
 // The Connect page (how to add Kriya to channels) and the web chat. That's
 // the whole front end: everything else is API.
 app.get('/', (c) => serveFile('start.html') ?? c.notFound());
-app.get('/chat', (c) => serveFile('portal/chat.html') ?? c.notFound());
+app.get('/chat', (c) => serveFile('chat.html') ?? c.notFound());
 
 app.get('/assets/*', (c) => {
   const filePath = c.req.path.replace(/^\/assets\//, '');

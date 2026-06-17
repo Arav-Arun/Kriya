@@ -247,14 +247,11 @@ export interface CardProvider {
   /** REFUND / CHARGEBACK postings. */
   creditTransaction(input: { accountId: string; amount: number; creditTransactionType: string; description: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
 
-  // ── Nudges ───────────────────────────────────────────────────────────────
-  nudges(accountId: string, opts?: { channel?: string; count?: number }): Promise<ProviderResult<unknown>>;
-
   // ── EMI ──────────────────────────────────────────────────────────────────
   emiConfig(accountId: string, q?: { amount?: number; txnRefId?: string; emiType?: 'TOTAL_OUTSTANDING' | 'LAST_BILLED_OUTSTANDING' }): Promise<ProviderResult<unknown>>;
   createEmi(input: { accountId: string; [k: string]: unknown }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   emiList(accountId: string): Promise<ProviderResult<unknown>>;
-  forecloseEmi(input: { accountId: string; emiRefId: string; interestCharged: number }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
+  forecloseEmi(input: { accountId: string; emiRefId: string; interestCharged: 'MONTHLY' | 'PER_DIEM' | 'NONE' }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
   foreclosureDetails(input: { accountId: string; emiRefId: string }): Promise<ProviderResult<unknown>>;
 
   // ── Benefits ─────────────────────────────────────────────────────────────

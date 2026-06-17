@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tokenize } from '../database/queries.ts';
+import { tokenize } from '../core/queries.ts';
 
 // Resolve project root containing the policies/ folder.
 let ROOT = path.dirname(fileURLToPath(import.meta.url));

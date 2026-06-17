@@ -10,7 +10,7 @@ Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card p
 2. **End-to-End Card Actions**: Blocks/locks, unblocks, hotlists and replaces cards; toggles usage controls (online, POS, contactless, ATM, international); converts purchases or outstanding to EMI and forecloses; posts refunds/chargebacks; manages autopay; and cancels RBI e-mandates, executed against the system of record, each verification- and policy-gated and fully audited.
 3. **Spend Intelligence**: Turns live transactions into a plain-language money summary: spend by category, top merchants, the largest purchase, and the amount building toward the next bill.
 4. **Generative, Visual Answers**: In the web/app chat, Kriya renders clean frosted cards (balance & utilisation, a spend breakdown, recent transactions, and tap-to-convert EMI plans) alongside its text reply. Every figure is live; no card is shown when the live read is unavailable.
-5. **Deterministic Policy Gating**: Eligibility for late-fee waivers, credit-limit increases, duplicate-charge refunds, and EMI conversions is computed via strict rules in `src/services/policy-gates.ts` instead of relying on LLM vibes.
+5. **Deterministic Policy Gating**: Eligibility for late-fee waivers, credit-limit increases, duplicate-charge refunds, and EMI conversions is computed via strict rules in `services/policy-gates.ts` instead of relying on LLM vibes.
 6. **RBI-Compliant Mandate & Dispute Lifecycles**: Fully models RBI e-mandate guidelines (cancellations, AFA-free limits, pre-debit notifications) and structured dispute/chargeback tracking with provisional-credit and resolution SLAs.
 7. **Every Channel, One Brain**: The same agent pipeline serves the web copilot, Telegram (`t.me/kriya_copilot_bot`), and bilingual voice (Hindi/Hinglish/English via Sarvam), meaning identity, memory, policy gates, and the audit trail come free on every surface.
 8. **Strict-Live Honesty**: Customer account data is sourced only from the Hyperface system of record.
@@ -35,9 +35,10 @@ Each user interaction triggers a durable Flue workflow orchestrating specialized
 ## Project Structure
 
 ```
-src/
 ├── app.ts                        # Hono HTTP server (API, Telegram webhooks, and pages)
+├── db.ts                         # Flue persistence database configuration
 ├── agents/                       # Specialized AI agents (Triage, Investigation, Policy, Resolution)
+├── channels/                     # Chat channel adapters (Telegram, Hermes)
 ├── database/                     # Supabase database queries and client
 ├── providers/                    # Hyperface UAT API integration client
 ├── services/                     # Business logic (Policy gates, e-mandates, voice, attachments, verification)
