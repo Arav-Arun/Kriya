@@ -12,9 +12,9 @@ Kriya is an autonomous, customer-facing CardOps copilot for Indian credit card p
 4. **Generative, Visual Answers**: In the web/app chat, Kriya renders clean frosted cards (balance & utilisation, spends breakdown with SVG chart, recent transactions, and tap-to-convert EMI plans) alongside its text reply. Every figure is live; no card is shown when the live read is unavailable.
 5. **Deterministic Policy Gating**: Eligibility for late-fee waivers, credit-limit increases, duplicate-charge refunds, and EMI conversions is computed via strict rules in `services/policy-gates.ts` instead of relying on LLM vibes.
 6. **Support Tickets Kanban Board**: A Jira/Pinterest-style board at `/tickets` (also linked in the navbar) that displays all customer escalations. Support operators can filter and search tickets, open a detail panel to inspect customer profiles, live balances, unbilled transactions, active disputes, and full AI audit logs, and enter resolution notes to mark tickets as resolved in the database.
-7. **Bilingual Voice Mode with Live Waves**: Speak to Kriya in English, Hindi, or Hinglish via Sarvam integration. Active recording is accompanied by a minimal jumping voice waves animation in the chat input.
+7. **Multilingual Voice Mode with Live Waves**: Speak to Kriya in English, Hindi, Hinglish, Tamil, Marathi, Malayalam, Bengali, Telugu, Kannada, Gujarati, or Punjabi via Sarvam integration. Active recording is accompanied by a minimal jumping voice waves animation in the chat input.
 8. **RBI-Compliant Mandate & Dispute Lifecycles**: Fully models RBI e-mandate guidelines (cancellations, AFA-free limits, pre-debit notifications) and structured dispute/chargeback tracking with provisional-credit and resolution SLAs.
-9. **Every Channel, One Brain**: The same agent pipeline serves the web copilot, Telegram (`t.me/kriya_copilot_bot`), and bilingual voice, meaning identity, memory, policy gates, and the audit trail come free on every surface.
+9. **Every Channel, One Brain**: The same agent pipeline serves the web copilot, Telegram (`t.me/kriya_copilot_bot`), and multilingual voice, meaning identity, memory, policy gates, and the audit trail come free on every surface.
 10. **Strict-Live Honesty**: Customer account data is sourced only from the Hyperface system of record.
 
 ---
