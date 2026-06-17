@@ -6,7 +6,7 @@
 // through the card provider (providers/hyperface.ts).
 import { Hono } from 'hono';
 import { flue } from '@flue/runtime/routing';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -37,7 +37,11 @@ enforceHostedGuardrails();
 import type { Customer } from './core/queries.ts';
 
 const app = new Hono();
-const UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './ui');
+const UI_DIR = (() => {
+  const localUi = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './ui');
+  if (existsSync(localUi)) return localUi;
+  return path.resolve(process.cwd(), './ui');
+})();
 const ROOT = process.cwd();
 
 const MIME: Record<string, string> = {
