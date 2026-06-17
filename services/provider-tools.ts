@@ -211,7 +211,26 @@ async function withBinding(
   const customer = await getCustomer(customerId);
   const binding = await resolveLiveBinding(customerId);
   if (!isServableBinding(binding, customer?.phone)) return noBindingJson();
-  return shape(await fn(binding!), binding);
+  const res = await fn(binding!);
+  if (res.ok && res.data && typeof res.data === 'object' && customer) {
+    const data = res.data as any;
+    const controls = {
+      international_enabled: customer.international_enabled === 1,
+      online_enabled: customer.online_enabled === 1,
+      pos_enabled: customer.pos_enabled === 1,
+      contactless_enabled: customer.contactless_enabled === 1,
+      atm_enabled: customer.atm_enabled === 1,
+      autopay_enabled: customer.autopay_enabled === 1,
+      autopay_mode: customer.autopay_mode,
+    };
+    if (data.id && (data.cardStatus || data.cardType)) {
+      Object.assign(data, controls);
+    }
+    if (data.primaryCard) {
+      Object.assign(data.primaryCard, controls);
+    }
+  }
+  return shape(res, binding);
 }
 
 // Read tools

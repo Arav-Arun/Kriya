@@ -90,7 +90,7 @@ async function findCustomerTransaction(customerId: number, transactionId: string
 export const getCustomerProfileTool = defineTool({
   name: 'get_customer_profile',
   description:
-    'Get the full profile of the currently authenticated customer: name, card details, credit limit, outstanding balance, CIBIL score, reward points, KYC status, and a payment behavior summary. For customers linked to a live provider account, balance/limits/card status come from the card system of record (source: "live_provider"); otherwise from records on file. Fields with no live source are marked "unavailable" — never treat "unavailable" as a real figure (e.g. do not read it as a zero balance or a passing CIBIL).',
+    'Get the full profile of the currently authenticated customer: name, card details, credit limit, outstanding balance, CIBIL score, reward points, KYC status, card usage controls (international_enabled, online_enabled, pos_enabled, contactless_enabled, atm_enabled, autopay_enabled, autopay_mode), and a payment behavior summary. For customers linked to a live provider account, balance/limits/card status come from the card system of record (source: "live_provider"); otherwise from records on file. Fields with no live source are marked "unavailable" — never treat "unavailable" as a real figure (e.g. do not read it as a zero balance or a passing CIBIL).',
   parameters: Type.Object({
     customer_id: Type.Number(),
   }),
@@ -138,6 +138,12 @@ export const getCustomerProfileTool = defineTool({
       risk_score: orUnavailable(c.risk_score),
       reward_points: orUnavailable(c.reward_points_balance),
       international_enabled: c.international_enabled === 1,
+      online_enabled: c.online_enabled === 1,
+      pos_enabled: c.pos_enabled === 1,
+      contactless_enabled: c.contactless_enabled === 1,
+      atm_enabled: c.atm_enabled === 1,
+      autopay_enabled: c.autopay_enabled === 1,
+      autopay_mode: c.autopay_mode,
       kyc_status: orUnavailable(c.kyc_status),
       kyc_expiry: orUnavailable(c.kyc_expiry),
       payment_summary: summary,
