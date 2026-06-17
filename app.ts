@@ -16,7 +16,7 @@ import {
   listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
   getSubscriptions, setCardControl, setAutopay, toggleInternational,
   logAction, getCustomerActionsLog, ProvisioningError,
-  listEscalations, resolveEscalation,
+  resolveEscalation,
 } from './core/queries.ts';
 import { supabase } from './core/supabase.ts';
 import {

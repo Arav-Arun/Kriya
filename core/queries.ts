@@ -421,18 +421,6 @@ export async function adjustCreditLimit(customerId: number, newLimit: number): P
   return (data?.length ?? 0) > 0;
 }
 
-export async function redeemRewards(customerId: number, points: number): Promise<boolean> {
-  const cust = await getCustomer(customerId);
-  // reward_points_balance is null for live-linked rows (no live source); a null
-  // balance is never redeemable.
-  if (!cust || cust.reward_points_balance == null || cust.reward_points_balance < points) return false;
-  const balance = cust.reward_points_balance;
-  const { data, error } = await supabase.from('customers')
-    .update({ reward_points_balance: balance - points })
-    .eq('id', customerId).gte('reward_points_balance', points).select();
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
 
 // ── Refunds ───────────────────────────────────────────────────────────
 export async function initiateRefund(transactionId: string): Promise<boolean> {
@@ -476,23 +464,11 @@ export async function createEscalation(e: {
   return id;
 }
 
-export async function listEscalations() {
-  return rows(supabase.from('escalations')
-    .select('id,customer_id,category,priority,assigned_team,summary,status,created_at')
-    .order('created_at', { ascending: false }));
-}
-
 export async function listCustomerEscalations(customerId: number) {
   return rows(supabase.from('escalations')
     .select('id,category,priority,assigned_team,summary,status,created_at,resolved_at,resolution_notes')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false }));
-}
-
-export async function getEscalation(id: string) {
-  const { data, error } = await supabase.from('escalations').select('*').eq('id', id).maybeSingle();
-  if (error) throw error;
-  return data ?? undefined;
 }
 
 export async function resolveEscalation(id: string, resolvedBy: string, notes: string): Promise<boolean> {
