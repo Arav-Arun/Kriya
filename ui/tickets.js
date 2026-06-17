@@ -100,10 +100,17 @@ async function fetchTickets() {
   }
 }
 
+const CATEGORIES = [
+  'Late Fee / Penalty', 'Duplicate Charge', 'Fraud Transactions', 'Card Declined',
+  'EMI Conversion', 'Rewards', 'Chargeback', 'Lost Card', 'KYC',
+  'Credit Limit Increase', 'Card Closure', 'International Transactions',
+  'Merchant Disputes', 'Subscriptions / Autopay', 'Card Management',
+  'Account Inquiry', 'General'
+];
+
 function populateCategoryFilter() {
-  const categories = [...new Set(tickets.map(t => t.category).filter(Boolean))];
   filterCategory.innerHTML = '<option value="">All Categories</option>' + 
-    categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 }
 
 function getPriorityBadgeClass(priority) {
