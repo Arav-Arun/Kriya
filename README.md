@@ -52,21 +52,29 @@ graph TD
     classDef saffron fill:#fdeede,stroke:#f9730c,stroke-width:2px,color:#1e2033;
     classDef green fill:#e3f1d8,stroke:#496d21,stroke-width:2px,color:#1e2033;
     
-    User([User Message]) --> Triage[Triage Agent]:::highlight
-    Triage --> |Routing & Urgency| Investigation[Investigation Agent]
-    Triage --> |Policy Analysis| Policy[Policy Agent]
+    User([User Message]) --> VerifyCheck{Verification Reply<br>or Pending EMI?}:::saffron
     
-    Investigation --> |Live Ledger Context| Resolution[Resolution Agent]:::highlight
-    Policy --> |SLA & Limits Rules| Resolution
+    VerifyCheck -->|Yes: Direct Bypass| Resolution[Resolution Agent]:::highlight
+    VerifyCheck -->|No| Triage[Triage Agent]:::highlight
     
-    Resolution --> F{Deterministic Policy Gate?}:::saffron
-    F -->|Pass| G[Execute Card Mutation]:::green
-    F -->|Fail| H[Flag & Escalate to Operator]
+    Triage --> RouteCheck{Triage Route?}:::saffron
     
-    G --> |Hyperface UAT API| I[Ledger Success]
-    H --> |Supabase Database| J[(Support Tickets Board)]
-    I --> J
-    J --> Reply([Reply & Visual Card response])
+    RouteCheck -->|analysis| Parallel[Parallel Analysis]:::highlight
+    Parallel --> Investigation[Investigation Agent]
+    Parallel --> Policy[Policy Agent]
+    
+    Investigation --> Resolution
+    Policy --> Resolution
+    
+    RouteCheck -->|direct| Resolution
+    
+    Resolution --> Tools{Deterministic<br>Policy Gates}:::saffron
+    
+    Tools -->|Pass| Ledger[Execute Hyperface UAT API]:::green
+    Tools -->|Fail / Exception| DB[(Supabase DB / Support Tickets)]
+    
+    Ledger --> DB
+    DB --> Reply([Reply & Visual Cards])
 ```
 
 ### Specialized Agents:
