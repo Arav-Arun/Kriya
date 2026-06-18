@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../core/env.ts';
 import type {
   CardProvider, ProviderResult, ProviderErrorCode,
-  LiveCustomerMatch, LiveAccountSummary, LiveTransactionFilters, MutationOptions,
+  LiveCustomerMatch, LiveAccountSummary, MutationOptions,
 } from './types.ts';
 
 // Successful UAT calls return in well under 3s; the old 25s cap only ever
@@ -178,7 +178,7 @@ export const hyperfaceProvider: CardProvider = {
 
   // Transactions endpoints
   statements: (accountId, range) => call(`/accounts/${accountId}/statements`, { method: 'POST', body: range ?? defaultStatementWindow() }),
-  downloadStatement: (accountId, statementId) => call(`/accounts/downloadStatement/${statementId}`, { method: 'GET', expectText: true }),
+  downloadStatement: (_accountId, statementId) => call(`/accounts/downloadStatement/${statementId}`, { method: 'GET', expectText: true }),
   transactions: (accountId, f) => call(`/accounts/${accountId}/transactions`, { method: 'POST', body: f ?? {} }),
   billedTransactions: (accountId, f) => call(`/accounts/${accountId}/billed`, { method: 'POST', body: { statementId: f.statementId, count: f.count ?? 50, offset: f.offset ?? 0 } }),
   unbilledTransactions: (accountId, opts) => call(`/accounts/${accountId}/unbilled`, { method: 'POST', body: { count: opts?.count ?? 50, offset: opts?.offset ?? 0 } }),
@@ -227,12 +227,5 @@ export const hyperfaceProvider: CardProvider = {
   // Cashback endpoints
   cashbackSummary: (accountId, range) => call('/cashback/summary/fetch', { method: 'POST', body: { accountId, ...range } }),
   cashbackTransactions: (accountId, range) => call('/cashback/transactions/fetch', { method: 'POST', body: { accountId, ...range } }),
-
-  // Webhooks endpoints
-  webhookSubscribe: (input, o) => call('/event/webhook/subscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  webhookUnsubscribe: (input, o) => call('/event/webhook/unsubscribe', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  webhookPause: (input, o) => call('/event/webhook/pause', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  webhookResume: (input, o) => call('/event/webhook/resume', { method: 'POST', body: input, idempotencyKey: idem(o) }),
-  webhookFetchSubscriptions: (q) => call('/event/webhook/fetchSubscriptions', { method: 'POST', body: q }),
 
 };

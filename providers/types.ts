@@ -274,12 +274,4 @@ export interface CardProvider {
   cashbackSummary(accountId: string, range?: { startDate?: string; endDate?: string }): Promise<ProviderResult<unknown>>;
   cashbackTransactions(accountId: string, range?: { startDate?: string; endDate?: string }): Promise<ProviderResult<unknown>>;
 
-  // ── Webhooks (event subscriptions; we register a shared-secret custom header
-  //    at subscribe time and verify it on every delivery — no built-in sig). ──
-  webhookSubscribe(input: { eventType: string; scope: string; scopeId: string; endpoint: string; headers?: Record<string, string> }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  webhookUnsubscribe(input: { subscriptionId?: string; scope?: string; scopeId?: string; eventType?: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  webhookPause(input: { subscriptionId?: string; scope?: string; scopeId?: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  webhookResume(input: { subscriptionId?: string; scope?: string; scopeId?: string }, o?: MutationOptions): Promise<ProviderResult<unknown>>;
-  webhookFetchSubscriptions(q: { scope: string; scopeId: string }): Promise<ProviderResult<unknown>>;
-
 }

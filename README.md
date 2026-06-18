@@ -104,8 +104,7 @@ graph TD
 │   └── supabase.ts               # Supabase client credentials wrapper
 ├── database/                     # DB schemas and migrations
 ├── providers/                    # Core banking / credit ledger integrations
-│   ├── hyperface.ts              # UAT endpoint bindings for the Hyperface Credit Stack
-│   └── hyperface-webhooks.ts     # Inbound event handlers (charge postings, alerts)
+│   └── hyperface.ts              # UAT endpoint bindings for the Hyperface Credit Stack
 ├── services/                     # Business services
 │   ├── policy-gates.ts           # Rules engine for fee waivers, limits, and disputes
 │   ├── verify.ts                 # Identity checking logic

@@ -41,6 +41,10 @@ supabase/
 DEPLOY.md
 deploy.md
 
+# Local codebase reading guides
+ARCHITECTURE.md
+REPOSITORY_HANDBOOK.md
+
 # ClickHouse plans & demo files
 Demo-ClickhouseDB/
 clickhouse-plan.md

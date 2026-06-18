@@ -24,7 +24,7 @@ const liveEnabled = () => config.providerMode === 'hyperface_uat' && hyperfacePr
 
 // Customer to live account binding
 
-export interface LiveBinding {
+interface LiveBinding {
   /** Provider customer id. Null for a demo_env binding when no test customer id
    *  is configured — fetchCustomer-based tools must short-circuit, never call
    *  the provider with a synthesized id. */
@@ -142,7 +142,7 @@ const MSG = {
 // be a cross-customer leak. Every customer-facing read uses isServableBinding,
 // so a demo_env-only binding behaves exactly like "not linked".
 
-export type LinkedRead =
+type LinkedRead =
   | { live: true; data: unknown }
   | { live: false; note?: string };
 
@@ -483,7 +483,7 @@ export const liveLockCardTool = defineTool({
 export const liveUnlockCardTool = defineTool({
   name: 'live_unlock_card',
   description:
-    'LIVE action: unlock the customer\'s card in the card system of record. SENSITIVE — requires two-factor verification; if the tool returns requires_verification=true, run the verification flow and retry.',
+    'LIVE action: unlock the customer\'s card in the card system of record. SENSITIVE — requires identity verification (the customer types their card last-4); if the tool returns requires_verification=true, run the verification flow and retry.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     reason: Type.String(),
@@ -505,7 +505,7 @@ function hotlistReasonEnum(text: string): 'FRAUD' | 'CARDLOST' | 'CARDSTOLEN' | 
 export const liveHotlistCardTool = defineTool({
   name: 'live_hotlist_card',
   description:
-    'LIVE action: permanently hotlist (kill) the card in the card system of record for loss/theft. IRREVERSIBLE and SENSITIVE — requires two-factor verification AND explicit customer confirmation first.',
+    'LIVE action: permanently hotlist (kill) the card in the card system of record for loss/theft. IRREVERSIBLE and SENSITIVE — requires identity verification (card last-4) AND explicit customer confirmation first.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     reason: Type.String(),
@@ -581,7 +581,7 @@ async function gatedAccountAction(
 export const liveRefundTool = defineTool({
   name: 'live_refund',
   description:
-    'LIVE action: post a REFUND or CHARGEBACK credit to the account in the card system of record (the live dispute/refund path — Hyperface has no separate dispute object; reversals are credit postings). SENSITIVE — needs two-factor verification. Only after a deterministic policy gate (check_duplicate_refund_eligibility) returned eligible=true. State the exact credited amount on success.',
+    'LIVE action: post a REFUND or CHARGEBACK credit to the account in the card system of record (the live dispute/refund path — Hyperface has no separate dispute object; reversals are credit postings). SENSITIVE — needs identity verification (card last-4). Only after a deterministic policy gate (check_duplicate_refund_eligibility) returned eligible=true. State the exact credited amount on success.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     amount: Type.Number({ description: 'Amount to credit back, in INR' }),
@@ -602,7 +602,7 @@ export const liveRefundTool = defineTool({
 export const liveCreateEmiTool = defineTool({
   name: 'live_create_emi',
   description:
-    'LIVE action: convert a purchase to EMI in the card system of record. SENSITIVE — needs two-factor verification. Quote terms with get_live_emi_offer and check_emi_conversion_eligibility first, then create with the chosen tenure. State the monthly installment on success.',
+    'LIVE action: convert a purchase to EMI in the card system of record. SENSITIVE — needs identity verification (card last-4). Quote terms with get_live_emi_offer and check_emi_conversion_eligibility first, then create with the chosen tenure. State the monthly installment on success.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     amount: Type.Number(),
@@ -624,7 +624,7 @@ export const liveCreateEmiTool = defineTool({
 export const liveForecloseEmiTool = defineTool({
   name: 'live_foreclose_emi',
   description:
-    'LIVE action: foreclose (close early) an existing EMI plan in the card system of record. SENSITIVE — needs two-factor verification. State the foreclosure charge on success.',
+    'LIVE action: foreclose (close early) an existing EMI plan in the card system of record. SENSITIVE — needs identity verification (card last-4). State the foreclosure charge on success.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     emi_ref_id: Type.String({ description: 'Provider EMI plan ref id (from get_live_emis)' }),
@@ -697,7 +697,7 @@ export const getLiveBenefitsByProgramTool = defineTool({
   description:
     'LIVE provider data: all benefits available on the card program (not customer-specific). Use for "what benefits does this card offer" or "show me all card perks" questions.',
   parameters: Type.Object({ customer_id: Type.Number() }),
-  execute: async ({ customer_id }) => {
+  execute: async ({ customer_id: _customer_id }) => {
     if (!liveEnabled()) return disabledJson();
     return shape(await hyperfaceProvider.fetchBenefitsByProgram({}));
   },
@@ -1085,5 +1085,3 @@ export const LIVE_ACTION_TOOLS = [
   liveSubscribeBenefitTool, liveUnsubscribeBenefitTool,
   liveCreditRewardsTool, liveDebitRewardsTool,
 ];
-
-

@@ -10,7 +10,7 @@ while (ROOT !== path.dirname(ROOT) && !existsSync(path.join(ROOT, 'policies'))) 
   ROOT = path.dirname(ROOT);
 }
 
-export interface KnowledgeDoc {
+interface KnowledgeDoc {
   slug: string;
   title: string;
   content: string;

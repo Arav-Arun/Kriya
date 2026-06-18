@@ -33,7 +33,7 @@ export const AFA_FREE_LIMIT_HIGH_INR = 100_000;
 export const afaFreeLimitFor = (category: string): number =>
   (HIGH_LIMIT.has(category) ? AFA_FREE_LIMIT_HIGH_INR : AFA_FREE_LIMIT_GENERAL_INR);
 
-export interface EMandate {
+interface EMandate {
   mandate_id: string;               // internal Kriya reference, NOT a registry id
   subscription_id: string;
   merchant: string;
@@ -105,7 +105,7 @@ export function toEMandate(sub: Record<string, any>): EMandate {
   };
 }
 
-export interface CancellationReceipt {
+interface CancellationReceipt {
   internal_reference: string;
   internal_mandate_reference: string;
   reference_note: string;

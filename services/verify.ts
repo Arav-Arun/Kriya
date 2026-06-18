@@ -1,22 +1,15 @@
-// Chat session verification using two-factor logic:
-// 1. Possession: Active web session or verified/trusted messaging channel.
-// 2. Knowledge: Card last-4 digits matched against the account record (valid for 30 min).
-// Sensitive actions require both factors. Read-only and emergency blocks require possession only.
+// Chat session verification: a single knowledge check.
+// Sensitive actions require the customer to confirm their card's last 4 digits
+// (valid for 30 minutes). Reads and protective blocks (block/lock card) require none.
 import { defineTool, Type } from '@flue/runtime';
 import { getCustomer, logAction } from '../core/queries.ts';
 
-// Verification state stores
+// Verification state store
+const KNOWLEDGE_TTL_MS = 30 * 60_000;
 
-interface ChannelBinding { kind: string; peer: string; trusted: boolean; at: number }
 interface VerifyState {
-  channel?: ChannelBinding;
   knowledgeAt?: number;
 }
-
-const TTL = {
-  channelMs: 2 * 60 * 60_000,
-  knowledgeMs: 30 * 60_000,
-};
 
 const states = new Map<number, VerifyState>();
 
@@ -32,7 +25,7 @@ function fresh(at: number | undefined, ttlMs: number): boolean {
 
 // Risk classification rules
 
-/** High-risk actions requiring both identity factors (possession + knowledge). */
+/** Sensitive actions that require the card last-4 before executing. */
 export const HIGH_RISK_ACTIONS = new Set([
   'unblock_card', 'hotlist_card', 'initiate_card_closure', 'replace_card',
   'initiate_refund', 'adjust_credit_limit', 'redeem_rewards', 'waive_fee',
@@ -46,37 +39,19 @@ export const HIGH_RISK_ACTIONS = new Set([
   'live_credit_rewards', 'live_debit_rewards',
 ]);
 
-export interface VerificationStatus {
-  channel_kind: string | null;
-  possession: boolean;
+interface VerificationStatus {
+  /** Card last-4 confirmed within the last 30 minutes. */
   knowledge: boolean;
-  factor_count: number;
-  /** Both factors satisfied — required for any high-risk action. */
+  /** Card last-4 confirmed — required for any sensitive action. */
   high_risk_allowed: boolean;
 }
 
 export function verificationStatus(customerId: number): VerificationStatus {
-  const s = stateFor(customerId);
-  const possession = Boolean(
-    (s.channel?.trusted || s.channel?.kind === 'web') &&
-    fresh(s.channel.at, TTL.channelMs)
-  );
-  const knowledge = fresh(s.knowledgeAt, TTL.knowledgeMs);
-  const factor_count = [possession, knowledge].filter(Boolean).length;
-  return {
-    channel_kind: s.channel && fresh(s.channel.at, TTL.channelMs) ? s.channel.kind : null,
-    possession, knowledge, factor_count,
-    high_risk_allowed: factor_count >= 2,
-  };
+  const knowledge = fresh(stateFor(customerId).knowledgeAt, KNOWLEDGE_TTL_MS);
+  return { knowledge, high_risk_allowed: knowledge };
 }
 
-/** Called by the chat workflow at the start of every turn with channel context. */
-export function noteChannelBinding(customerId: number, ctx: { kind: string; peer?: string; trusted: boolean }): void {
-  const s = stateFor(customerId);
-  s.channel = { kind: ctx.kind, peer: ctx.peer ?? '', trusted: ctx.trusted, at: Date.now() };
-}
-
-export interface ActionVerdict {
+interface ActionVerdict {
   allowed: boolean;
   level: string;
   reason: string;
@@ -84,33 +59,28 @@ export interface ActionVerdict {
   needed?: string;
 }
 
-/** Deterministic gate consulted by high-risk action tools before executing. */
+/** Deterministic gate consulted by sensitive action tools before executing. */
 export async function assertActionAllowed(customerId: number, actionType: string): Promise<ActionVerdict> {
   const v = verificationStatus(customerId);
-  const level = [
-    v.possession ? `possession(${v.channel_kind})` : null,
-    v.knowledge ? 'knowledge' : null,
-  ].filter(Boolean).join('+') || 'none';
+  const level = v.knowledge ? 'knowledge' : 'none';
 
   if (!HIGH_RISK_ACTIONS.has(actionType)) {
-    return { allowed: true, level, reason: 'Low-risk action; session-level identity is sufficient.' };
+    return { allowed: true, level, reason: 'Low-risk action; no card verification needed.' };
   }
   if (v.high_risk_allowed) {
-    return { allowed: true, level, reason: `Two-factor verification satisfied (${level}).` };
+    return { allowed: true, level, reason: 'Card last-4 verified.' };
   }
 
-  // Possession is established via session; request knowledge factor (card last-4) to satisfy 2FA.
-  const needed = 'knowledge' as const;
   await logAction({
     customer_id: customerId,
     action_type: 'verification_required',
-    action_detail: { action: actionType, current_factors: level, needed },
+    action_detail: { action: actionType, needed: 'knowledge' },
   });
   return {
     allowed: false,
     level,
-    reason: `"${actionType}" is a sensitive action — ask the customer to type the last 4 digits of their card to confirm it's them, then retry (current factors: ${level}).`,
-    needed,
+    reason: `"${actionType}" is a sensitive action — ask the customer to type the last 4 digits of their card to confirm it's them, then retry.`,
+    needed: 'knowledge',
   };
 }
 
@@ -131,16 +101,16 @@ export async function verifyKnowledge(customerId: number, cardLast4: string): Pr
 export async function handleVerificationReply(
   customerId: number,
   message: string,
-): Promise<{ handled: boolean; verified?: boolean; factor?: 'knowledge'; note?: string }> {
+): Promise<{ handled: boolean; verified?: boolean; note?: string }> {
   const s = stateFor(customerId);
-  if (!fresh(s.knowledgeAt, TTL.knowledgeMs)) {
+  if (!fresh(s.knowledgeAt, KNOWLEDGE_TTL_MS)) {
     const m = message.match(/(?<!\d)(\d{4})(?!\d)/);
     if (m) {
       const res = await verifyKnowledge(customerId, m[1]);
       return {
-        handled: true, verified: res.verified, factor: 'knowledge',
+        handled: true, verified: res.verified,
         note: res.verified
-          ? 'the card last-4 is correct — the knowledge factor is now satisfied.'
+          ? 'the card last-4 is correct — identity is now verified.'
           : 'the card digits did not match the account.',
       };
     }
@@ -153,7 +123,7 @@ export async function handleVerificationReply(
 export const getVerificationStatusTool = defineTool({
   name: 'get_verification_status',
   description:
-    'Check the customer\'s current identity verification level: which factors are satisfied (trusted-channel possession, card last-4 knowledge) and whether sensitive actions are allowed (high_risk_allowed — needs BOTH factors). Call this BEFORE attempting a sensitive action so you know whether to verify first.',
+    'Check whether the customer has confirmed their card\'s last 4 digits and whether sensitive actions are allowed (high_risk_allowed). Call this BEFORE attempting a sensitive action so you know whether to ask for the card last-4 first.',
   parameters: Type.Object({ customer_id: Type.Number() }),
   execute: async ({ customer_id }) => JSON.stringify(verificationStatus(Number(customer_id))),
 });
@@ -161,7 +131,7 @@ export const getVerificationStatusTool = defineTool({
 export const verifyIdentityKnowledgeTool = defineTool({
   name: 'verify_identity_knowledge',
   description:
-    'Verify the customer by the last 4 digits of their card (ask them to type it). On success this satisfies the knowledge factor for 30 minutes. Never reveal the expected digits.',
+    'Verify the customer by the last 4 digits of their card (ask them to type it). On success this allows sensitive actions for 30 minutes. Never reveal the expected digits.',
   parameters: Type.Object({
     customer_id: Type.Number(),
     card_last4: Type.String({ description: 'The 4 digits the customer typed' }),

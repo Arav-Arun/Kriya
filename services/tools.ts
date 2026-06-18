@@ -60,7 +60,7 @@ function transactionWindow(from?: string, to?: string): { from: string; to: stri
   return { from: fmt(fromDate), to: fmt(toDate) };
 }
 
-/** Enforces 2FA logic before executing sensitive actions. */
+/** Enforces card-last-4 verification before executing sensitive actions. */
 async function requireVerified(customerId: number, actionType: string): Promise<string | null> {
   const verdict = await assertActionAllowed(customerId, actionType);
   if (verdict.allowed) return null;
@@ -163,6 +163,7 @@ export const getTransactionsTool = defineTool({
     limit: Type.Optional(Type.Number({ description: 'Max rows, default 30, max 100' })),
   }),
   execute: async ({ customer_id, merchant, from, to, limit }) => {
+    void merchant;
     const cid = Number(customer_id);
     // The provider returns NOTHING without a date window (it falls back to the
     // current cycle, which is empty for any account whose activity predates it),
@@ -800,6 +801,7 @@ export const getStatementsTool = defineTool({
     limit: Type.Optional(Type.Number({ description: 'Max statements, default 6' })),
   }),
   execute: async ({ customer_id, limit }) => {
+    void limit;
     const cid = Number(customer_id);
     const live = await tryLinkedRead(cid, (b) => hyperfaceProvider.statements(b.accountId));
     if (live.live) {
@@ -1011,4 +1013,3 @@ export const setConversationStateTool = defineTool({
     return JSON.stringify({ success: true, state });
   },
 });
-

@@ -351,10 +351,9 @@ async function checkEmiConversion(customerId: number, transactionId?: string, te
   const c = await getCustomer(customerId);
   if (!c) return verdict('emi_conversion', POL, { missing_evidence: ['customer'], required_next_step: 'Customer not found.' });
 
-  const [txns, activeEmis, summary] = await Promise.all([
+  const [txns, activeEmis] = await Promise.all([
     getTransactions(customerId, { limit: 100 }) as Promise<any[]>,
     getActiveEmis(customerId) as Promise<any[]>,
-    getPaymentSummary(customerId),
   ]);
   const target = transactionId ? txns.find((t) => t.id === String(transactionId)) : undefined;
   const VALID_TENURES = [3, 6, 9, 12, 18, 24];

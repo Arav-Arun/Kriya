@@ -21,7 +21,7 @@ export const voiceEnabled = (): boolean =>
     ? Boolean(config.sarvamApiKey)
     : config.voiceProvider === 'mock';
 
-export interface Transcription {
+interface Transcription {
   transcript: string;
   languageCode: string | null;
 }

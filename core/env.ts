@@ -47,7 +47,6 @@ export interface KriyaConfig {
     /** Issuer-level master key for issuer customer details API. */
     issuerSecretKey: string | undefined;
     programId: string | undefined;
-    webhookSecret: string | undefined;
     /** Known-good UAT sample resources for demos before per-customer linking. */
     testCustomerId: string | undefined;
     testAccountId: string | undefined;
@@ -116,7 +115,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): KriyaConfig {
       secretKey: env.HYPERFACE_SECRET_KEY || undefined,
       issuerSecretKey: env.HYPERFACE_ISSUER_SECRET_KEY || undefined,
       programId: env.HYPERFACE_PROGRAM_ID || undefined,
-      webhookSecret: env.HYPERFACE_WEBHOOK_SECRET || undefined,
       testCustomerId: env.HYPERFACE_TEST_CUSTOMER_ID || undefined,
       testAccountId: env.HYPERFACE_TEST_ACCOUNT_ID || undefined,
       testCardId: env.HYPERFACE_TEST_CARD_ID || undefined,

@@ -22,13 +22,9 @@ import { supabase } from './core/supabase.ts';
 import { config, enforceHostedGuardrails, updateTelegramConfig } from './core/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
 import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact, KRIYA_TELEGRAM_HELP } from './channels/telegram.ts';
-import { handleInbound, notifyCustomer, customerIdByPhone, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
+import { handleInbound, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
 import { hyperfaceProvider } from './providers/hyperface.ts';
 import { linkedLiveSummary } from './services/provider-tools.ts';
-import {
-  WEBHOOK_SECRET_HEADER, verifyWebhookSecret, parseHyperfaceEvent, alreadySeenEvent,
-  shouldNotify, mobileForAccount, notificationText,
-} from './providers/hyperface-webhooks.ts';
 
 enforceHostedGuardrails();
 
@@ -40,7 +36,6 @@ const UI_DIR = (() => {
   if (existsSync(localUi)) return localUi;
   return path.resolve(process.cwd(), './ui');
 })();
-const ROOT = process.cwd();
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -432,9 +427,8 @@ app.post('/api/channels/telegram/webhook', async (c) => {
   if (!parsed) return c.json({ ok: true }); // non-text/non-contact update — ACK
 
   if (parsed.kind === 'contact') {
-    // Persist the binding so proactive alerts survive a restart, then welcome.
-    // Both are fire-and-forget so a slow Telegram API call can't delay the ACK
-    // and trigger a webhook retry.
+    // Record the shared contact, then welcome. Both are fire-and-forget so a
+    // slow Telegram API call can't delay the ACK and trigger a webhook retry.
     void rememberTelegramContact(parsed.phone, parsed.chatId, parsed.profileName)
       .catch((err) => console.error('[telegram] persist contact failed:', err));
     void telegramAdapter.sendText(
@@ -516,95 +510,6 @@ app.post('/api/channels/telegram/setup', async (c) => {
   }
 });
 
-
-// ── Hyperface provider event webhooks ─────────────────────────────────
-// Inbound provider events (transaction posted, payment received, fraud flag).
-// Auth is the custom secret header we registered at subscribe time — Hyperface
-// ships no built-in signature. ACK fast; resolve + notify asynchronously.
-async function processHyperfaceEvent(raw: unknown): Promise<void> {
-  const ev = parseHyperfaceEvent(raw);
-  if (!ev) return;
-  if (alreadySeenEvent(ev.eventId)) return;
-
-  // Route ACCOUNT-scoped events to a Kriya customer via the registered mobile
-  // number on the account (accountSummary is a permitted live read today).
-  let customerId: number | null = null;
-  if (ev.scope === 'ACCOUNT' && ev.scopeId) {
-    const mobile = await mobileForAccount(ev.scopeId);
-    if (mobile) customerId = await customerIdByPhone(mobile);
-  }
-
-  if (customerId) {
-    await logAction({
-      customer_id: customerId,
-      action_type: 'provider_event',
-      action_detail: { event_type: ev.eventType, scope: ev.scope, scope_id: ev.scopeId, event_id: ev.eventId },
-      policy_reference: 'Hyperface webhook',
-    });
-    if (shouldNotify(ev.eventType)) {
-      const outcome = await notifyCustomer(customerId, notificationText(ev), {
-        event_type: ev.eventType, event_id: ev.eventId,
-      });
-      if (!outcome.delivered) {
-        console.warn(`[hyperface-webhook] ${ev.eventType} not delivered to customer ${customerId}: ${outcome.reason ?? ''}`);
-      }
-    }
-  } else {
-    console.log(`[hyperface-webhook] ${ev.eventType} (${ev.scope}:${ev.scopeId}) — no matching Kriya customer`);
-  }
-}
-
-app.post('/api/providers/hyperface/webhook', async (c) => {
-  if (!verifyWebhookSecret(c.req.header(WEBHOOK_SECRET_HEADER))) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  const raw = await c.req.text();
-  let body: unknown;
-  try { body = JSON.parse(raw); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  // Process in the background so provider retries see a fast 2xx ACK.
-  processHyperfaceEvent(body).catch((err) => {
-    console.error('[hyperface-webhook] processing failed:', err);
-  });
-  return c.json({ received: true });
-});
-
-// Subscribe Kriya's webhook receiver to a provider event, registering our
-// shared secret as the delivery-auth header. scope_id is the account/card id.
-app.post('/api/providers/hyperface/webhook/subscribe', async (c) => {
-  if (config.providerMode !== 'hyperface_uat' || !hyperfaceProvider.configured) {
-    return c.json({ error: 'Hyperface provider mode is not enabled.' }, 503);
-  }
-  if (!config.hyperface.webhookSecret) {
-    return c.json({ error: 'Set HYPERFACE_WEBHOOK_SECRET before subscribing (it authenticates deliveries).' }, 400);
-  }
-  const body = await c.req.json().catch(() => null) as
-    { event_type?: string; scope?: string; scope_id?: string; endpoint?: string } | null;
-  if (!body?.event_type || !body?.scope_id) {
-    return c.json({ error: 'event_type and scope_id are required' }, 400);
-  }
-  const endpoint = body.endpoint || `${config.appBaseUrl}/api/providers/hyperface/webhook`;
-  const res = await hyperfaceProvider.webhookSubscribe({
-    eventType: String(body.event_type),
-    scope: String(body.scope ?? 'ACCOUNT').toUpperCase(),
-    scopeId: String(body.scope_id),
-    endpoint,
-    headers: { [WEBHOOK_SECRET_HEADER]: config.hyperface.webhookSecret },
-  });
-  return res.ok
-    ? c.json({ subscribed: true, endpoint, data: res.data })
-    : c.json({ subscribed: false, code: res.code, message: res.message }, 502);
-});
-
-app.get('/api/providers/hyperface/webhook/subscriptions', async (c) => {
-  if (config.providerMode !== 'hyperface_uat' || !hyperfaceProvider.configured) {
-    return c.json({ error: 'Hyperface provider mode is not enabled.' }, 503);
-  }
-  const scope = String(c.req.query('scope') ?? 'ACCOUNT').toUpperCase();
-  const scopeId = String(c.req.query('scope_id') ?? '');
-  if (!scopeId) return c.json({ error: 'scope_id query param is required' }, 400);
-  const res = await hyperfaceProvider.webhookFetchSubscriptions({ scope, scopeId });
-  return res.ok ? c.json(res.data) : c.json({ code: res.code, message: res.message }, 502);
-});
 
 // ── Flue (workflow dispatch + durable run streams) ────────────────────
 app.route('/', flue());

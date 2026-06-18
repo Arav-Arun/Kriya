@@ -5,13 +5,8 @@ import { createCustomerFromLive, ProvisioningError } from '../core/queries.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
 import { invalidateLiveBinding } from '../services/provider-tools.ts';
 import { phoneKey } from './types.ts';
-import type { ChannelAdapter, ChannelKind, InboundChannelMessage } from './types.ts';
-import { telegramAdapter, rememberContact as rememberTelegramBinding } from './telegram.ts';
-
-// Outbound adapter registry for proactive delivery.
-const ADAPTERS: Partial<Record<ChannelKind, ChannelAdapter>> = {
-  telegram: telegramAdapter,
-};
+import type { ChannelAdapter, InboundChannelMessage } from './types.ts';
+import { rememberContact as rememberTelegramBinding } from './telegram.ts';
 
 interface MatchedCustomer {
   id: number;
@@ -37,12 +32,6 @@ async function customerByPhone(raw: string): Promise<MatchedCustomer | null> {
     phoneCache = { at: Date.now(), byKey };
   }
   return phoneCache.byKey.get(key) ?? null;
-}
-
-// Resolve registered mobile to customer ID (calls local database).
-export async function customerIdByPhone(raw: string): Promise<number | null> {
-  const match = await customerByPhone(raw);
-  return match?.id ?? null;
 }
 
 // Web sign-in identity matching. Matches or provisions customer.
@@ -100,7 +89,6 @@ async function provisionFromLive(raw: string): Promise<MatchedCustomer | null> {
 // Message history and database persistence.
 const seenProviderIds = new Set<string>();
 const conversationByPeer = new Map<string, number>();
-const lastChannelByCustomer = new Map<number, { channel: ChannelKind; peer: string }>();
 let channelTableMissing = false;
 
 // Check if message was already processed (in-memory & db deduplication).
@@ -166,7 +154,7 @@ async function runChatTurn(
   customerId: number,
   conversationId: number | null,
   message: string,
-  channel: { kind: string; peer: string; trusted: boolean },
+  channel: { kind: string; peer: string },
 ): Promise<TurnResult> {
   const res = await fetch(`${config.appBaseUrl}/workflows/chat-turn?wait=result`, {
     method: 'POST',
@@ -193,7 +181,7 @@ const SETUP_FAILED_REPLY =
   'Namaste! I found your card account but could not finish setting up your profile just now. '
   + 'This is a temporary issue on our side — please try again in a few minutes.';
 
-export interface HermesOutcome {
+interface HermesOutcome {
   matched: boolean;
   deduped?: boolean;
   customer_id?: number;
@@ -244,7 +232,6 @@ export async function handleInbound(
   }
 
   const conversationId = await lastConversationFor(msg.channel, msg.from);
-  lastChannelByCustomer.set(customer.id, { channel: msg.channel, peer: phoneKey(msg.from) || msg.from });
   await recordMessage({
     channel: msg.channel, direction: 'inbound', peer: msg.from,
     customerId: customer.id, conversationId,
@@ -255,7 +242,6 @@ export async function handleInbound(
   const turn = await runChatTurn(customer.id, conversationId, msg.text, {
     kind: msg.channel,
     peer: phoneKey(msg.from),
-    trusted: true,
   });
   const newConversationId = turn.conversation_id ?? conversationId ?? null;
   if (newConversationId) {
@@ -296,65 +282,4 @@ export async function rememberTelegramContact(
     providerMessageId: null, body: '',
     meta: { event: 'contact', telegram_chat_id: chatId, profile_name: profileName },
   });
-}
-
-async function rehydrateTelegramBinding(peer: string): Promise<void> {
-  if (channelTableMissing) return;
-  const { data, error } = await supabase.from('channel_messages')
-    .select('meta').eq('channel', 'telegram').eq('peer', phoneKey(peer))
-    .order('id', { ascending: false }).limit(25);
-  if (error) { channelTableMissing = true; return; }
-  for (const row of (data ?? []) as { meta: unknown }[]) {
-    let chatId: unknown;
-    try {
-      const m = typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta;
-      chatId = m?.telegram_chat_id;
-    } catch { /* ignore */ }
-    if (chatId) { rememberTelegramBinding(peer, String(chatId)); return; }
-  }
-}
-
-// Route proactive alerts to customer channel
-async function routeFor(customerId: number): Promise<{ channel: ChannelKind; peer: string } | null> {
-  const cached = lastChannelByCustomer.get(customerId);
-  if (cached) return cached;
-  if (channelTableMissing) return null;
-  const { data, error } = await supabase.from('channel_messages')
-    .select('channel,peer').eq('customer_id', customerId).eq('direction', 'inbound')
-    .order('id', { ascending: false }).limit(1).maybeSingle();
-  if (error) { channelTableMissing = true; return null; }
-  if (!data?.channel || !data?.peer) return null;
-  const route = { channel: data.channel as ChannelKind, peer: String(data.peer) };
-  lastChannelByCustomer.set(customerId, route);
-  return route;
-}
-
-export interface NotifyOutcome {
-  delivered: boolean;
-  channel?: ChannelKind;
-  reason?: string;
-}
-
-// Send a proactive message (transaction, payment, fraud alerts) to the customer on their last-used channel.
-export async function notifyCustomer(
-  customerId: number,
-  text: string,
-  meta?: Record<string, unknown>,
-): Promise<NotifyOutcome> {
-  const route = await routeFor(customerId);
-  if (!route) return { delivered: false, reason: 'No known channel for this customer.' };
-  const adapter = ADAPTERS[route.channel];
-  if (!adapter || !adapter.configured) {
-    return { delivered: false, channel: route.channel, reason: `Channel ${route.channel} has no configured outbound adapter.` };
-  }
-  // Re-learn Telegram chat ID binding if process restarted.
-  if (route.channel === 'telegram') await rehydrateTelegramBinding(route.peer);
-  const delivery = await adapter.sendText(route.peer, text);
-  await recordMessage({
-    channel: route.channel, direction: 'outbound', peer: route.peer,
-    customerId, conversationId: null,
-    providerMessageId: delivery.providerMessageId ?? null, body: text,
-    meta: { proactive: true, ...meta, delivered: delivery.ok, error: delivery.error },
-  });
-  return { delivered: delivery.ok, channel: route.channel, reason: delivery.error };
 }
