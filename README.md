@@ -11,16 +11,14 @@ Kriya acts as a plain-language translator and execution layer for the [Hyperface
 ### 1. Accounts & Balances
 * **Live Account Summary**: Fetches current ledger balance, available credit, cash limits, and overall card utilization in real time.
 * **Account Records**: Reads product variant metadata, billing cycles, status, and key cardholder dates.
-* **Credit Limit Updates**: Computes eligibility and executes limit increases or decreases.
 
 ### 2. Card Management & Security
-* **Emergency Operations**: Instantly executes a card lock (reversible freeze) or permanent hotlisting (irreversible disable) during fraud events.
-* **Usage Controls**: Toggles online transactions, physical POS, tap to pay, ATM withdrawals, and international usage instantly.
-* **Replacement Routing**: Places card replacement orders (e.g., damaged or stolen cards) with auto-address verification.
+* **Emergency Operations**: Executes a card lock (reversible freeze) or permanent hotlisting (irreversible disable) on the live card during fraud events.
+* **Replacement Routing**: Places a card replacement order (e.g., damaged or stolen cards) in the card system of record.
 
 ### 3. Transactions & Statements
 * **Dynamic Ledgers**: Queries billed and unbilled transactions over any custom date window.
-* **Statement Access**: Generates statement histories, billing totals, minimum dues, and provides direct PDF document downloads.
+* **Statement Access**: Reads statement histories, billing totals, and minimum dues, and retrieves a specific statement's document by id.
 * **Transaction Inquiries**: Inspects specific transaction details by reference ID to answer cardholder queries.
 
 ### 4. EMI & Pay Later
@@ -32,12 +30,12 @@ Kriya acts as a plain-language translator and execution layer for the [Hyperface
 * **Live Points Balance**: Tracks earned, pending, redeemed, and expiring points.
 * **Ledger History**: Inspects point postings associated with specific purchases.
 * **Instant Redemption**: Redeems available reward points directly against the current card balance.
-* **Cashback Activity**: Tracks transaction-level cashback rules and reversals.
+* **Cashback Activity**: Reads transaction-level cashback earned and reversed from the card system.
 
-### 6. Regulatory Compliance & Support
-* **Fee Waivers**: Auto-waives annual, late, or over-limit fees (governed by RBI compliance limits and credit profiles).
-* **Dispute Lifecycles**: Files and tracks formal disputes/chargebacks within RBI-mandated SLA timelines.
-* **Kanban Operator Dashboard**: A web dashboard at `/tickets` allowing operations teams to review customer escalation histories, live card balances, audit trails, and log notes.
+### 6. Refunds, Fraud & Escalations
+* **Refunds & Chargebacks**: Posts refund or chargeback credits to the account in the card system of record (Hyperface has no separate dispute object — reversals are credit postings), behind a deterministic duplicate-charge gate.
+* **Fraud Liability Assessment**: Deterministic RBI limited-liability band check (zero / limited / per-policy from the working days to report), then routes the case to Fraud Operations.
+* **Kanban Operator Dashboard**: A web dashboard at `/tickets` letting operations teams review customer escalation histories, the account snapshot on file, audit trails, and log notes.
 
 ---
 

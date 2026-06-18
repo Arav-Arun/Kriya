@@ -52,7 +52,6 @@
         <ul class="api-list">
           <li><strong>Account Summary</strong>: current balance, credit/cash limits, currency, card snapshot</li>
           <li><strong>Account Details</strong>: full record: product, billing cycle, status, dates</li>
-          <li><strong>Update Credit Limit</strong>: increase or decrease the approved credit limit</li>
         </ul>
       </article>
 
@@ -66,7 +65,6 @@
           <li><strong>Unlock Card</strong>: remove the temporary lock</li>
           <li><strong>Hotlist Card</strong>: permanently disable a lost or stolen card (irreversible)</li>
           <li><strong>Replace Card</strong>: order a replacement card (damaged/lost)</li>
-          <li><strong>Usage Controls</strong>: toggle online, POS, contactless, ATM, and international usage instantly</li>
         </ul>
       </article>
 
@@ -81,7 +79,7 @@
           <li><strong>Unbilled Transactions</strong>: charges in the current cycle, building toward your next bill</li>
           <li><strong>Transaction Inquiry</strong>: look up a single transaction by id or reference</li>
           <li><strong>Fetch Statements</strong>: statement history with totals, dues, and dates</li>
-          <li><strong>Download Statement</strong>: get the statement document (PDF)</li>
+          <li><strong>Statement Document</strong>: pull a specific statement's document by id from the card system</li>
         </ul>
       </article>
 
@@ -109,22 +107,20 @@
           <li><strong>Reward Ledger</strong>: every points posting and the transaction or benefit that earned it</li>
           <li><strong>Redeem Points</strong>: redeem available reward points against the account</li>
           <li><strong>Cashback Summary</strong>: cashback earned, accrued, and reversed on your card</li>
-          <li><strong>Cashback Activity</strong>: cashback per transaction, and why a charge did or didn't earn it</li>
+          <li><strong>Cashback Activity</strong>: cashback earned and reversed per transaction, read from the card system</li>
         </ul>
       </article>
 
       <article class="api-group">
         <div class="api-group-head">
           <span class="api-dot" style="background: var(--ink)"></span>
-          <h3>Disputes, Fees & Escalations</h3>
+          <h3>Refunds, Fraud & Escalations</h3>
         </div>
         <ul class="api-list">
-          <li><strong>Raise Dispute/Chargeback</strong>: file a formal dispute on a settled transaction, tracked per RBI timelines</li>
-          <li><strong>Track Dispute</strong>: check the status, provisional credit, and resolution timeline</li>
-          <li><strong>Initiate Refund</strong>: credit back an eligible transaction immediately</li>
-          <li><strong>Waive Fee</strong>: auto-waive a late/annual fee (max 1 per year, max ₹1,00,000, policy-gated)</li>
-          <li><strong>Create Escalation</strong>: escalate to a human operations team with full AI investigation summary</li>
-          <li><strong>Fraud Liability Assessment</strong>: RBI-compliant limited-liability check within 3 working days</li>
+          <li><strong>Refund / Chargeback</strong>: post a refund or chargeback credit back to the account in the card system</li>
+          <li><strong>Duplicate-Charge Check</strong>: a deterministic policy gate that must pass before any refund is posted</li>
+          <li><strong>Fraud Liability Check</strong>: RBI limited-liability band from when the charge was reported, then routed to Fraud Operations</li>
+          <li><strong>Create Escalation</strong>: hand off to a human operations team with the full AI investigation summary</li>
         </ul>
       </article>
 
@@ -138,7 +134,7 @@
           <li><strong>Visual Answers</strong>: balance, transactions and EMI plans rendered as clean cards right in the chat</li>
           <li><strong>Benefits & Perks</strong>: lounge access, insurance, and partner offers on your card</li>
           <li><strong>Voice, Your Language</strong>: ask in English, Hindi, Hinglish, Tamil, Marathi, Malayalam, Bengali, Telugu, Kannada, Gujarati, or Punjabi and hear the answer back</li>
-          <li><strong>Always Logged</strong>: every check and action is recorded for a complete audit trail</li>
+          <li><strong>Audit Trail</strong>: every action Kriya takes is logged for review</li>
         </ul>
       </article>
 
@@ -165,13 +161,7 @@
         <img src="/assets/assets/screenshots/SCR-20260617-tjxh.png" alt="Kriya answering a balance question in Hindi" loading="lazy">
       </button>
       <button class="shot" type="button" aria-label="Expand screenshot">
-        <img src="/assets/assets/screenshots/SCR-20260617-tivc.png" alt="Kriya turning off international usage on the card" loading="lazy">
-      </button>
-      <button class="shot" type="button" aria-label="Expand screenshot">
         <img src="/assets/assets/screenshots/SCR-20260617-tiqg.png" alt="Kriya explaining the available EMI options" loading="lazy">
-      </button>
-      <button class="shot" type="button" aria-label="Expand screenshot">
-        <img src="/assets/assets/screenshots/SCR-20260617-tisi.png" alt="Kriya checking active autopays and e-mandates" loading="lazy">
       </button>
       <button class="shot" type="button" aria-label="Expand screenshot">
         <img src="/assets/assets/screenshots/SCR-20260617-tifc.png" alt="Kriya reporting reward points and cashback earned" loading="lazy">
@@ -183,7 +173,7 @@
         <img src="/assets/assets/screenshots/SCR-20260617-tilg.png" alt="Kriya explaining cashback earned so far" loading="lazy">
       </button>
     </div>
-    <p class="shots-hint">Tap the deck to flip through all 10 screens</p>
+    <p class="shots-hint">Tap the deck to flip through all 8 screens</p>
   </section>
 
   <section id="channels">
@@ -329,7 +319,7 @@
               </div>
               <div class="feature-text">
                 <h4>Compliance Logs</h4>
-                <p>Tracks all ledger queries and agent actions.</p>
+                <p>Logs every action Kriya takes.</p>
               </div>
             </div>
           </div>
