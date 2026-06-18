@@ -1,18 +1,17 @@
 import { defineTool, Type } from '@flue/runtime';
 import {
   getCustomer, getPaymentHistory, getPaymentSummary,
-  getFeesAndCharges, getUnwaivedFees, getRecentWaivers, waiveFee,
+  getFeesAndCharges,
   updateCustomerContext, createCustomerTransaction,
   getActiveEmis, foreclosEmi, createEmi,
-  updateCardStatus, adjustCreditLimit,
+  updateCardStatus,
   initiateRefund, createEscalation, logAction,
-  setAutopay, toggleInternational, setCardControl,
-  getDisputes, createDispute, getSubscriptions, cancelSubscription,
+  getDisputes, getSubscriptions,
 } from '../core/queries.ts';
 import { supabase } from '../core/supabase.ts';
 import { searchPolicies } from './knowledge.ts';
 import {
-  toEMandate, buildCancellationReceipt,
+  toEMandate,
   AFA_FREE_LIMIT_GENERAL_INR, AFA_FREE_LIMIT_HIGH_INR,
 } from './emandates.ts';
 import { assertActionAllowed } from './verify.ts';
@@ -28,15 +27,6 @@ const EMI_SHORT_TENURE_MAX = 6;             // boundary for the short-tenure rat
 const EMI_PROCESSING_FEE_PCT = 1;           // processing fee as % of principal
 const EMI_MIN_AMOUNT_INR = 2500;            // minimum transaction amount for EMI conversion
 const EMI_FORECLOSURE_PCT = 3;              // foreclosure fee % (also set in queries.createEmi)
-// Fee waiver policy
-const WAIVER_MAX_AMOUNT_INR = 1000;         // max single fee auto-waivable
-const WAIVER_WINDOW_MONTHS = 12;            // one waiver per rolling window
-// Credit limit policy
-const CREDIT_LIMIT_CIBIL_FLOOR = 730;       // minimum CIBIL for a limit increase
-const CREDIT_LIMIT_AUTO_APPROVE_MULTIPLIER = 1.5; // max auto-approved limit vs current
-// Dispute / chargeback SLA (RBI timelines)
-const DISPUTE_PROVISIONAL_CREDIT_SLA = '7 working days';
-const DISPUTE_RESOLUTION_SLA = '30-45 days';
 
 // Fallback label for un-synchronized DB records.
 const SOURCE_RECORDS_ON_FILE = 'records_on_file';
@@ -74,7 +64,7 @@ async function requireVerified(customerId: number, actionType: string): Promise<
 
 /**
  * Look up a single transaction by id, scoped to the customer. Used by
- * raise_dispute / convert_to_emi / initiate_refund so they all resolve a txn
+ * convert_to_emi / initiate_refund so they all resolve a txn
  * the same way — by primary key, not by scanning a capped recent-rows page
  * (which silently misses anything older than the page). Returns the row or null.
  */
@@ -413,93 +403,7 @@ export const getDisputesTool = defineTool({
   },
 });
 
-
 // Action tools
-
-export const raiseDisputeTool = defineTool({
-  name: 'raise_dispute',
-  description:
-    `Raise a formal dispute/chargeback on a transaction when an instant refund is not possible (merchant dispute, goods not received, amount mismatch, unauthorized charge already reported). The transaction must be SUCCESS status and not already disputed. Per RBI timelines, provisional credit is assessed within ${DISPUTE_PROVISIONAL_CREDIT_SLA} and resolution within ${DISPUTE_RESOLUTION_SLA}. Returns the dispute reference ID.`,
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    transaction_id: Type.String(),
-    reason: Type.String({ description: 'e.g. Unauthorized transaction | Duplicate processing | Goods or services not received | Amount differs from receipt | Cancelled subscription still charged' }),
-  }),
-  execute: async ({ customer_id, transaction_id, reason }) => {
-    const cid = Number(customer_id);
-    const txn = await findCustomerTransaction(cid, String(transaction_id));
-    if (!txn) return JSON.stringify({ success: false, reason: 'Transaction not found in this customer account' });
-    if (txn.status !== 'SUCCESS') {
-      return JSON.stringify({ success: false, reason: `Transaction status is ${txn.status}; only settled successful charges can be disputed` });
-    }
-    const existing = await getDisputes(cid, 50) as any[];
-    if (existing.some((d) => d.transaction_id === txn.id && !['won', 'lost'].includes(d.status))) {
-      return JSON.stringify({ success: false, reason: 'An open dispute already exists for this transaction' });
-    }
-    const id = await createDispute({
-      customer_id: cid, transaction_id: txn.id, merchant: txn.merchant,
-      amount: txn.amount, reason: String(reason),
-    });
-    await logAction({
-      customer_id: cid,
-      action_type: 'dispute_raised',
-      action_detail: { dispute_id: id, transaction_id: txn.id, merchant: txn.merchant, amount: txn.amount, reason },
-      policy_reference: 'POL-001',
-    });
-    return JSON.stringify({
-      success: true, dispute_id: id, merchant: txn.merchant, amount: txn.amount,
-      status: 'under_review',
-      message: `Dispute ${id} raised. Provisional credit is assessed within ${DISPUTE_PROVISIONAL_CREDIT_SLA}; final resolution within ${DISPUTE_RESOLUTION_SLA} per RBI guidelines.`,
-    });
-  },
-});
-
-export const waiveFeeTool = defineTool({
-  name: 'waive_fee',
-  description:
-    `Waive a specific fee for the customer. Policy guard: max 1 waiver per ${WAIVER_WINDOW_MONTHS} months, max INR ${WAIVER_MAX_AMOUNT_INR}. Provide the fee ID from get_fees_and_charges. Returns success/failure with reason.`,
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    fee_id: Type.Number({ description: 'The fee ID from get_fees_and_charges' }),
-    reason: Type.String({ description: 'Why the fee is being waived' }),
-  }),
-  execute: async ({ customer_id, fee_id, reason }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'waive_fee');
-    if (verificationBlock) return verificationBlock;
-    const recentWaivers = await getRecentWaivers(cid, WAIVER_WINDOW_MONTHS);
-    if (recentWaivers.length > 0) {
-      return JSON.stringify({ success: false, reason: `Customer already received a fee waiver in the last ${WAIVER_WINDOW_MONTHS} months` });
-    }
-    const unwaivedFees = await getUnwaivedFees(cid);
-    const fee = unwaivedFees.find((f: any) => f.id === Number(fee_id));
-    if (!fee) {
-      return JSON.stringify({ success: false, reason: 'Fee not found or already waived' });
-    }
-    if ((fee as any).amount > WAIVER_MAX_AMOUNT_INR) {
-      return JSON.stringify({ success: false, reason: `Fee amount INR ${(fee as any).amount} exceeds the INR ${WAIVER_MAX_AMOUNT_INR} auto-waiver limit` });
-    }
-    const result = await waiveFee(Number(fee_id), String(reason));
-    if (result.success) {
-      await logAction({
-        customer_id: cid,
-        action_type: 'fee_waived',
-        action_detail: {
-          fee_id,
-          amount: result.amount,
-          fee_type: result.fee_type,
-          reason,
-          previous_available_limit: result.previous_available_limit,
-          new_available_limit: result.new_available_limit,
-          previous_outstanding_total: result.previous_outstanding_total,
-          new_outstanding_total: result.new_outstanding_total,
-        },
-        policy_reference: 'Goodwill waiver policy',
-      });
-    }
-    return JSON.stringify(result);
-  },
-});
 
 export const blockCardTool = defineTool({
   name: 'block_card',
@@ -547,23 +451,6 @@ export const hotlistCardTool = defineTool({
     const ok = await updateCardStatus(cid, 'closed');
     if (ok) await logAction({ customer_id: cid, action_type: 'card_hotlisted', action_detail: { reason }, policy_reference: 'POL-007' });
     return JSON.stringify({ success: ok, new_status: 'closed', warning: 'Card permanently disabled' });
-  },
-});
-
-export const toggleInternationalTool = defineTool({
-  name: 'toggle_international',
-  description: 'Enable or disable international transactions on the customer\'s card.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    enabled: Type.Boolean({ description: 'true to enable, false to disable' }),
-  }),
-  execute: async ({ customer_id, enabled }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'toggle_international');
-    if (verificationBlock) return verificationBlock;
-    const ok = await toggleInternational(cid, Boolean(enabled));
-    if (ok) await logAction({ customer_id: cid, action_type: 'international_toggled', action_detail: { enabled } });
-    return JSON.stringify({ success: ok, international_enabled: enabled });
   },
 });
 
@@ -696,70 +583,6 @@ export const initiateRefundTool = defineTool({
   },
 });
 
-export const adjustCreditLimitTool = defineTool({
-  name: 'adjust_credit_limit',
-  description:
-    `Increase the customer's credit limit. Policy: customer must have 6+ months vintage, CIBIL ${CREDIT_LIMIT_CIBIL_FLOOR}+, no missed payments in 12 months. Max auto-approved limit is ${CREDIT_LIMIT_AUTO_APPROVE_MULTIPLIER}x the current limit. Requires a VERIFIED CIBIL on the system of record; if none is on file the increase cannot be auto-approved.`,
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    new_limit: Type.Number({ description: 'The new credit limit in INR' }),
-    reason: Type.String(),
-  }),
-  execute: async ({ customer_id, new_limit, reason }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'adjust_credit_limit');
-    if (verificationBlock) return verificationBlock;
-
-    const c = await getCustomer(cid);
-    if (!c) return JSON.stringify({ success: false, reason: 'Customer not found' });
-    const nl = Number(new_limit);
-    const maxAutoApproval = Math.round(c.credit_limit * CREDIT_LIMIT_AUTO_APPROVE_MULTIPLIER);
-    if (nl > maxAutoApproval) {
-      return JSON.stringify({ success: false, reason: `Requested limit INR ${nl} exceeds auto-approval ceiling of INR ${maxAutoApproval}. Needs committee review.` });
-    }
-    // Fail closed: a missing (null) CIBIL is "unverified", not "passing".
-    if (c.cibil_score == null) {
-      return JSON.stringify({ success: false, reason: `No verified CIBIL score is on file; a verified CIBIL of ${CREDIT_LIMIT_CIBIL_FLOOR}+ is required for an auto-approved limit increase. Needs committee review.` });
-    }
-    if (c.cibil_score < CREDIT_LIMIT_CIBIL_FLOOR) {
-      return JSON.stringify({ success: false, reason: `CIBIL score ${c.cibil_score} is below the ${CREDIT_LIMIT_CIBIL_FLOOR} minimum for limit increase` });
-    }
-    const ok = await adjustCreditLimit(cid, nl);
-    if (ok) await logAction({ customer_id: cid, action_type: 'credit_limit_adjusted', action_detail: { old_limit: c.credit_limit, new_limit: nl, reason }, policy_reference: 'POL-009' });
-    return JSON.stringify({ success: ok, old_limit: c.credit_limit, new_limit: nl });
-  },
-});
-
-export const initiateCardClosureTool = defineTool({
-  name: 'initiate_card_closure',
-  description:
-    'Begin the card closure process. This is IRREVERSIBLE. Checks for outstanding balance, active EMIs, and unredeemed rewards before proceeding. RBI mandates closure within 7 working days.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    confirmation: Type.String({ description: 'Must be "CONFIRMED" to proceed' }),
-  }),
-  execute: async ({ customer_id, confirmation }) => {
-    if (String(confirmation) !== 'CONFIRMED') {
-      return JSON.stringify({ success: false, reason: 'Customer must confirm closure. Set confirmation to "CONFIRMED".' });
-    }
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'initiate_card_closure');
-    if (verificationBlock) return verificationBlock;
-    const c = await getCustomer(cid);
-    if (!c) return JSON.stringify({ success: false, reason: 'Customer not found' });
-    const activeEmis = await getActiveEmis(cid);
-    if ((activeEmis as any[]).length > 0) {
-      return JSON.stringify({ success: false, reason: `Cannot close card: ${(activeEmis as any[]).length} active EMI(s) must be foreclosed first`, active_emis: activeEmis });
-    }
-    if (c.outstanding_total > 0) {
-      return JSON.stringify({ success: false, reason: `Cannot close card: outstanding balance of INR ${c.outstanding_total} must be cleared first` });
-    }
-    const ok = await updateCardStatus(cid, 'closed');
-    if (ok) await logAction({ customer_id: cid, action_type: 'card_closure_initiated', action_detail: { reward_points_forfeited: c.reward_points_balance }, policy_reference: 'POL-010' });
-    return JSON.stringify({ success: ok, message: 'Card closure initiated. Confirmation will be sent within 7 working days per RBI mandate.' });
-  },
-});
-
 export const createEscalationTool = defineTool({
   name: 'create_escalation',
   description:
@@ -811,55 +634,6 @@ export const getStatementsTool = defineTool({
   },
 });
 
-export const setCardControlTool = defineTool({
-  name: 'set_card_control',
-  description:
-    'Enable or disable a card usage channel: online_enabled, pos_enabled, contactless_enabled, atm_enabled, or international_enabled. Takes effect immediately.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    control: Type.String({ description: 'online_enabled | pos_enabled | contactless_enabled | atm_enabled | international_enabled' }),
-    enabled: Type.Boolean(),
-  }),
-  execute: async ({ customer_id, control, enabled }) => {
-    const cid = Number(customer_id);
-    const ok = await setCardControl(cid, String(control), Boolean(enabled));
-    if (!ok) return JSON.stringify({ success: false, reason: `Unknown control "${control}"` });
-    await logAction({
-      customer_id: cid,
-      action_type: 'card_control_updated',
-      action_detail: { control: String(control), enabled: Boolean(enabled) },
-    });
-    return JSON.stringify({ success: true, control, enabled });
-  },
-});
-
-export const setAutopayTool = defineTool({
-  name: 'set_autopay',
-  description:
-    'Enable or disable autopay on the card, and choose the mode: "minimum_due" (pay minimum automatically) or "total_due" (pay full statement automatically). Debits the registered bank account on the due date.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    enabled: Type.Boolean(),
-    mode: Type.Optional(Type.String({ description: 'minimum_due | total_due' })),
-  }),
-  execute: async ({ customer_id, enabled, mode }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'set_autopay');
-    if (verificationBlock) return verificationBlock;
-
-    const cleanMode = String(mode ?? 'minimum_due');
-    const ok = await setAutopay(cid, Boolean(enabled), cleanMode);
-    if (ok) {
-      await logAction({
-        customer_id: cid,
-        action_type: 'autopay_updated',
-        action_detail: { enabled: Boolean(enabled), mode: cleanMode },
-      });
-    }
-    return JSON.stringify({ success: ok, enabled, mode: cleanMode });
-  },
-});
-
 export const getSubscriptionsTool = defineTool({
   name: 'get_subscriptions',
   description:
@@ -879,39 +653,6 @@ export const getSubscriptionsTool = defineTool({
       approx_monthly_total_inr: monthlyTotal,
       subscriptions: rows,
     });
-  },
-});
-
-export const cancelSubscriptionTool = defineTool({
-  name: 'cancel_subscription',
-  description:
-    'Cancel a subscription\'s recurring autopay mandate on the card so it is never charged again. Provide the subscription ID from get_subscriptions. Effective immediately per the RBI e-mandate framework; any already-paid period stays usable until it ends. This does NOT refund past charges; use initiate_refund or raise_dispute ("Cancelled subscription still charged") for those.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    subscription_id: Type.String({ description: 'The subscription ID from get_subscriptions, e.g. SUB-0012' }),
-    reason: Type.String({ description: 'Why the customer is cancelling' }),
-  }),
-  execute: async ({ customer_id, subscription_id, reason }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'cancel_subscription');
-    if (verificationBlock) return verificationBlock;
-    const result = await cancelSubscription(cid, String(subscription_id));
-    if (result.success) {
-      await logAction({
-        customer_id: cid,
-        action_type: 'subscription_cancelled',
-        action_detail: {
-          subscription_id: result.subscription_id,
-          merchant: result.merchant,
-          plan: result.plan,
-          amount: result.amount,
-          billing_cycle: result.billing_cycle,
-          reason,
-        },
-        policy_reference: 'RBI e-mandate framework',
-      });
-    }
-    return JSON.stringify(result);
   },
 });
 
@@ -941,56 +682,6 @@ export const getEmandatesTool = defineTool({
         customer_fee_policy: 'No customer fee for e-mandate setup, debit, or cancellation (RBI).',
       },
       mandates,
-    });
-  },
-});
-
-export const cancelEmandateTool = defineTool({
-  name: 'cancel_emandate',
-  description:
-    'Cancel / opt out of a card e-mandate (RBI standing instruction) by its subscription_id from get_active_emandates. Revokes all future auto-debits immediately, charges the customer no fee, records a mandate cancellation event, and returns a structured cancellation_receipt. Does NOT refund past charges; use initiate_refund or raise_dispute for those. Run check_emandate_cancellation_eligibility first.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    subscription_id: Type.String({ description: 'The subscription_id / mandate from get_active_emandates, e.g. SUB-0012' }),
-    reason: Type.String({ description: 'Why the customer is cancelling' }),
-  }),
-  execute: async ({ customer_id, subscription_id, reason }) => {
-    const cid = Number(customer_id);
-    const verificationBlock = await requireVerified(cid, 'cancel_emandate');
-    if (verificationBlock) return verificationBlock;
-    // Snapshot the live mandate first so the receipt reflects pre-cancel state.
-    const subs = await getSubscriptions(cid) as any[];
-    const sub = subs.find((s) => String(s.id) === String(subscription_id));
-    if (!sub) return JSON.stringify({ success: false, reason: 'Mandate not found on this card' });
-    const mandate = toEMandate(sub);
-    const result = await cancelSubscription(cid, String(subscription_id));
-    if (!result.success) return JSON.stringify({ success: false, reason: result.reason });
-
-    const receipt = buildCancellationReceipt(mandate, result.next_charge_avoided ?? null);
-    await logAction({
-      customer_id: cid,
-      action_type: 'subscription_cancelled',
-      action_detail: {
-        mandate_event: 'mandate_cancelled',
-        internal_mandate_reference: mandate.mandate_id,
-        subscription_id: result.subscription_id,
-        merchant: result.merchant,
-        merchant_category: mandate.merchant_category,
-        plan: result.plan,
-        amount: result.amount,
-        billing_cycle: result.billing_cycle,
-        next_debit_cancelled: receipt.next_debit_cancelled,
-        cancellation_internal_reference: receipt.internal_reference,
-        customer_fee_inr: 0,
-        reason,
-      },
-      policy_reference: 'RBI e-mandate framework (recurring standing instructions)',
-    });
-    return JSON.stringify({
-      success: true,
-      internal_mandate_reference: mandate.mandate_id,
-      cancellation_status: 'cancelled',
-      cancellation_receipt: receipt,
     });
   },
 });

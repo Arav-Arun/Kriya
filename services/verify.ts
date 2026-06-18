@@ -27,11 +27,9 @@ function fresh(at: number | undefined, ttlMs: number): boolean {
 
 /** Sensitive actions that require the card last-4 before executing. */
 export const HIGH_RISK_ACTIONS = new Set([
-  'unblock_card', 'hotlist_card', 'initiate_card_closure', 'replace_card',
-  'initiate_refund', 'adjust_credit_limit', 'redeem_rewards', 'waive_fee',
+  'unblock_card', 'hotlist_card',
+  'initiate_refund',
   'convert_to_emi', 'foreclose_emi',
-  'cancel_subscription', 'cancel_emandate', 'set_autopay',
-  'toggle_international',
   // Live provider writes (system of record).
   'live_unlock_card', 'live_hotlist_card',
   'live_replace_card', 'live_refund', 'live_create_emi', 'live_foreclose_emi',

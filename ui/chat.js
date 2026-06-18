@@ -1,6 +1,5 @@
 import { esc, md, inr, fmtWhen, daysUntil, wavFromBlob } from './utils.js';
 const ACTION_RENDER = {
-  fee_waived: (d) => ['green', `Fee waived: ${inr(d?.amount)} ${String(d?.fee_type ?? '').replace(/_/g, ' ')} reversed`, d?.new_outstanding_total != null ? `Outstanding is now ${inr(d.new_outstanding_total)}` : ''],
   refund_initiated: (d) => ['green', `Refund credited: ${inr(d?.amount)} from ${d?.merchant ?? 'merchant'}`, d?.new_available_limit != null ? `Available limit is now ${inr(d.new_available_limit)}` : ''],
   refund_rejected: (d) => ['red', 'Refund not possible', d?.reason ?? ''],
   card_blocked: (d) => ['red', 'Card blocked', d?.reason ?? ''],
@@ -9,16 +8,11 @@ const ACTION_RENDER = {
   international_toggled: (d) => ['blue', `International usage ${d?.enabled ? 'enabled' : 'disabled'}`, ''],
   emi_converted: (d) => ['blue', `EMI created: ${inr(d?.amount)} over ${d?.tenure} months`, `${inr(d?.emi_amount)}/month`],
   emi_foreclosed: (d) => ['blue', 'EMI foreclosed', `Total payable ${inr((d?.remaining_principal ?? 0) + (d?.foreclosure_charge ?? 0))}`],
-  rewards_redeemed: (d) => ['green', `${Number(d?.points ?? 0).toLocaleString('en-IN')} points redeemed`, `${inr(d?.value_inr)} statement credit`],
-  credit_limit_adjusted: (d) => ['green', 'Credit limit increased', `${inr(d?.old_limit)} to ${inr(d?.new_limit)}`],
-  card_closure_initiated: () => ['amber', 'Card closure initiated', 'This cannot be undone'],
   escalation_created: (d) => ['amber', `Sent for specialist review: ${d?.escalation_id ?? ''}`, 'A specialist will take it from here'],
   context_recorded: () => ['blue', 'Account details saved', ''],
   transaction_recorded: (d) => ['blue', `Transaction noted: ${d?.merchant ?? ''} ${inr(d?.amount)}`, ''],
   card_control_updated: (d) => ['blue', `${String(d?.control ?? '').replace('_enabled', '').replace(/_/g, ' ')} transactions ${d?.enabled ? 'enabled' : 'disabled'}`, 'Card control updated'],
   autopay_updated: (d) => ['blue', `Autopay ${d?.enabled ? 'enabled' : 'disabled'}`, d?.enabled ? `Mode: ${d?.mode === 'total_due' ? 'full statement' : 'minimum due'}` : ''],
-  dispute_raised: (d) => ['amber', `Dispute raised: ${d?.dispute_id ?? ''} · ${inr(d?.amount)} at ${d?.merchant ?? 'merchant'}`, 'Logged for review — we\'ll update you on the outcome'],
-  subscription_cancelled: (d) => ['green', `Subscription cancelled: ${d?.merchant ?? ''} ${inr(d?.amount)}/${d?.billing_cycle === 'annual' ? 'yr' : 'mo'}`, 'Marked cancelled in your Kriya records'],
 };
 
 // Starter prompts, paged (3×3 grid per page) so the welcome stays compact while

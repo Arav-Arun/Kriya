@@ -11,8 +11,8 @@
 //     required_next_step, policy_reference }
 import { defineTool, Type } from '@flue/runtime';
 import {
-  getCustomer, getTransactions, getPaymentHistory, getPaymentSummary,
-  getUnwaivedFees, getRecentWaivers, getDisputes, getActiveEmis, getSubscriptions,
+  getCustomer, getTransactions,
+  getDisputes, getActiveEmis,
 } from '../core/queries.ts';
 
 interface PolicyVerdict {
@@ -76,143 +76,6 @@ function workingDaysBetween(from: Date, to: Date): number {
     if (dow !== 0 && dow !== 6) count += 1;
   }
   return count;
-}
-
-// 1. Late fee waiver policy gate
-// Rule: max 1 waiver per 12 months, fee ≤ ₹1,000, ≥80% on-time record,
-// CIBIL ≥650 (critically low CIBIL signals chronic delinquency → no goodwill),
-// account must not be under fraud investigation or KYC freeze.
-// NOTE: there is no published late-fee goodwill-waiver policy doc; POL-002 is the
-// Fraud policy and the 650/80% thresholds aren't documented anywhere. Until a
-// policy is authored, this gate cites an explicit internal-rule reference rather
-// than a wrong policy id.
-async function checkLateFeeWaiver(customerId: number, feeId?: number): Promise<PolicyVerdict> {
-  const POL = 'Internal rule (not yet in policy docs) · goodwill late-fee waiver';
-  const c = await getCustomer(customerId);
-  if (!c) return verdict('late_fee_waiver', POL, { missing_evidence: ['customer'], required_next_step: 'Customer not found.' });
-
-  const [recentWaivers, unwaived, summary] = await Promise.all([
-    getRecentWaivers(customerId, 12),
-    getUnwaivedFees(customerId),
-    getPaymentSummary(customerId),
-  ]);
-  const fee = feeId != null ? (unwaived as any[]).find((f) => f.id === Number(feeId)) : undefined;
-  const onTimePct = summary.on_time_pct;
-
-  const facts_checked = {
-    waivers_in_last_12_months: recentWaivers.length,
-    on_time_payment_pct: onTimePct,
-    cibil_score: c.cibil_score,
-    card_status: c.card_status,
-    fee_id: feeId ?? null,
-    fee_amount: fee ? Number((fee as any).amount) : null,
-    fee_type: fee ? (fee as any).fee_type : null,
-    waiver_amount_ceiling: 1000,
-    on_time_threshold_pct: 80,
-    min_cibil_for_waiver: 650,
-  };
-  const reason_codes: string[] = [];
-  const missing_evidence: string[] = [];
-
-  if (feeId == null) missing_evidence.push('fee_id (call get_fees_and_charges to identify the specific fee)');
-  else if (!fee) reason_codes.push('FEE_NOT_FOUND_OR_ALREADY_WAIVED');
-  if (recentWaivers.length > 0) reason_codes.push('WAIVER_ALREADY_USED_12M');
-  if (fee && Number((fee as any).amount) > 1000) reason_codes.push('FEE_EXCEEDS_AUTO_CEILING');
-  if (onTimePct < 80) reason_codes.push('ON_TIME_HISTORY_BELOW_80PCT');
-  // CIBIL is nullable for live-provisioned accounts (no live bureau source). A
-  // real CIBIL is never 0, so null = "not on file", not "critically low": treat
-  // it as missing evidence and never render an adverse reason_code or a number.
-  if (c.cibil_score == null) missing_evidence.push('cibil_score (no bureau score on file; cannot assess goodwill discipline)');
-  else if (c.cibil_score < 650) reason_codes.push('CIBIL_BELOW_650_CHRONIC_DELINQUENCY');
-  if (c.card_status === 'closed') reason_codes.push('ACCOUNT_CLOSED');
-
-  const eligible = isEligible(reason_codes, missing_evidence);
-  if (eligible) reason_codes.push('GOODWILL_WAIVER_QUALIFIED');
-
-  return verdict('late_fee_waiver', POL, {
-    eligible, reason_codes, facts_checked, missing_evidence,
-    required_next_step: eligible
-      ? `Call waive_fee with fee_id=${feeId} and a reason citing the ${onTimePct}% on-time record and CIBIL ${c.cibil_score}.`
-      : firstNextStep([
-        [missing_evidence.length > 0, 'Resolve missing evidence above before deciding. If the CIBIL score is unavailable, say it is not on file and the waiver cannot be assessed — do not quote a score.'],
-        [reason_codes.includes('FEE_EXCEEDS_AUTO_CEILING'), 'Above the ₹1000 auto-waiver ceiling: route to a human via create_escalation; do not waive.'],
-        [reason_codes.includes('CIBIL_BELOW_650_CHRONIC_DELINQUENCY'), `CIBIL score ${c.cibil_score} is critically low; goodwill waivers are reserved for customers demonstrating repayment discipline.`],
-      ], 'Do not waive. Explain the blocking reason_code to the customer honestly.'),
-  });
-}
-
-// 2. Credit limit increase policy gate
-// Policy POL-009: vintage ≥6 months, CIBIL ≥730, zero missed/late in 12 months,
-// utilization 30-90% (>90% triggers affordability review), no active fraud
-// investigation or KYC freeze, auto-approval ceiling = 150% of current limit,
-// committee review if resulting limit > ₹10,00,000.
-async function checkCreditLimitIncrease(customerId: number, requestedLimit?: number): Promise<PolicyVerdict> {
-  const POL = 'POL-009 · Credit limit enhancement';
-  const c = await getCustomer(customerId);
-  if (!c) return verdict('credit_limit_increase', POL, { missing_evidence: ['customer'], required_next_step: 'Customer not found.' });
-
-  const history = await getPaymentHistory(customerId, 12) as any[];
-  const issued = parseDate(c.card_issued_on);
-  const vintageMonths = issued ? monthsBetween(issued, new Date()) : null;
-  const missed = history.filter((p) => p.payment_status === 'missed' || (p.payment_status === 'late' && Number(p.days_late ?? 0) >= 30)).length;
-  const maxAuto = Math.round(c.credit_limit * 1.5);
-  const utilization = c.credit_limit > 0
-    ? Math.round(((c.credit_limit - c.available_limit) / c.credit_limit) * 100)
-    : 0;
-  const COMMITTEE_THRESHOLD = 1_000_000;
-
-  const facts_checked = {
-    card_vintage_months: vintageMonths,
-    cibil_score: c.cibil_score,
-    late_or_missed_payments_12m: missed,
-    current_limit: c.credit_limit,
-    available_limit: c.available_limit,
-    utilization_pct: utilization,
-    requested_limit: requestedLimit ?? null,
-    auto_approval_ceiling: maxAuto,
-    committee_threshold: COMMITTEE_THRESHOLD,
-    card_status: c.card_status,
-    kyc_status: c.kyc_status,
-    min_vintage_months: 6,
-    min_cibil: 730,
-    ideal_utilization_band: '30-90%',
-  };
-  const reason_codes: string[] = [];
-  const missing_evidence: string[] = [];
-
-  if (vintageMonths == null) missing_evidence.push('card_issued_on (no issuance date on file; cannot compute account vintage)');
-  else if (vintageMonths < 6) reason_codes.push('VINTAGE_BELOW_6_MONTHS');
-  // CIBIL nullable for live-provisioned accounts: null = not on file, never 0.
-  // Cannot decline on an absent bureau score — require it as evidence instead.
-  if (c.cibil_score == null) missing_evidence.push('cibil_score (no bureau score on file; required to assess limit increase)');
-  else if (c.cibil_score < 730) reason_codes.push('CIBIL_BELOW_730');
-  if (missed > 0) reason_codes.push('MISSED_OR_LATE_PAYMENT_12M');
-  if (utilization > 90) reason_codes.push('UTILIZATION_ABOVE_90PCT_AFFORDABILITY_REVIEW');
-  if (c.card_status === 'blocked') reason_codes.push('CARD_BLOCKED_ACTIVE_INVESTIGATION');
-  if (c.card_status === 'closed') reason_codes.push('ACCOUNT_CLOSED');
-  // kyc_status nullable: absent status is not "current" — require it as evidence
-  // rather than silently treating null as a pass or rendering an adverse code.
-  if (c.kyc_status == null) missing_evidence.push('kyc_status (KYC status unavailable; required to confirm KYC is current)');
-  else if (c.kyc_status === 'expired' || c.kyc_status === 'pending') reason_codes.push('KYC_NOT_CURRENT');
-  if (requestedLimit != null && Number(requestedLimit) > maxAuto) reason_codes.push('EXCEEDS_AUTO_APPROVAL_CEILING');
-  if (requestedLimit != null && Number(requestedLimit) > c.credit_limit * 2) reason_codes.push('EXCEEDS_COMMITTEE_THRESHOLD_100PCT');
-  if (requestedLimit != null && Number(requestedLimit) > COMMITTEE_THRESHOLD) reason_codes.push('EXCEEDS_COMMITTEE_THRESHOLD_10L');
-
-  const eligible = isEligible(reason_codes, missing_evidence);
-  if (eligible) reason_codes.push('LIMIT_INCREASE_QUALIFIED');
-
-  return verdict('credit_limit_increase', POL, {
-    eligible, reason_codes, facts_checked, missing_evidence,
-    required_next_step: eligible
-      ? `Call adjust_credit_limit with new_limit up to ₹${maxAuto.toLocaleString('en-IN')}.`
-      : firstNextStep([
-        [missing_evidence.length > 0, 'Resolve missing evidence above before deciding. Where a required input (CIBIL, KYC status, issuance date) is unavailable, say it is not on file and the request cannot be assessed — do not quote or infer a value.'],
-        [reason_codes.includes('EXCEEDS_COMMITTEE_THRESHOLD_10L') || reason_codes.includes('EXCEEDS_COMMITTEE_THRESHOLD_100PCT'), `Requested limit exceeds ${reason_codes.includes('EXCEEDS_COMMITTEE_THRESHOLD_10L') ? '₹10,00,000' : '100% increase'} and requires Credit Committee approval. Create an escalation to Risk Operations.`],
-        [reason_codes.includes('EXCEEDS_AUTO_APPROVAL_CEILING'), `Cap an auto-approval at ₹${maxAuto.toLocaleString('en-IN')}, or escalate for committee review above that.`],
-        [reason_codes.includes('UTILIZATION_ABOVE_90PCT_AFFORDABILITY_REVIEW'), `Utilization is ${utilization}% (above 90%); this triggers an affordability review instead of auto-approval. Escalate to Risk Operations.`],
-        [reason_codes.includes('KYC_NOT_CURRENT'), `KYC status is ${c.kyc_status}; limit increases require current KYC. Ask the customer to complete KYC re-verification first.`],
-      ], 'Do not increase. Tell the customer which criterion failed.'),
-  });
 }
 
 // 3. Duplicate charge refund policy gate
@@ -305,37 +168,6 @@ async function checkDuplicateRefund(customerId: number, transactionId?: string):
       [reason_codes.includes('OPEN_DISPUTE_EXISTS'), 'A dispute is already open; answer with get_disputes status instead of a new refund.'],
       [reason_codes.includes('NO_DUPLICATE_PAIR_FOUND'), 'No matching duplicate found (same merchant, same amount ±₹1, within 24 hours). Do NOT refund; offer raise_dispute if the customer still contests it.'],
     ], 'Resolve missing evidence / blocking reason before any refund.'),
-  });
-}
-
-// 4. E-mandate cancellation / opt-out policy gate
-async function checkEmandateCancellation(customerId: number, subscriptionId?: string): Promise<PolicyVerdict> {
-  const POL = 'RBI e-mandate framework · standing-instruction opt-out';
-  const subs = await getSubscriptions(customerId) as any[];
-  const sub = subscriptionId ? subs.find((s) => String(s.id) === String(subscriptionId)) : undefined;
-
-  const reason_codes: string[] = [];
-  const missing_evidence: string[] = [];
-  if (!subscriptionId) missing_evidence.push('subscription_id (call get_subscriptions to match the merchant)');
-  else if (!sub) reason_codes.push('MANDATE_NOT_FOUND');
-  else if (sub.status !== 'active') reason_codes.push('MANDATE_ALREADY_CANCELLED');
-
-  const facts_checked = {
-    subscription_id: subscriptionId ?? null,
-    merchant: sub?.merchant ?? null,
-    status: sub?.status ?? null,
-    next_charge_on: sub?.next_charge_on ?? null,
-  };
-  const eligible = Boolean(sub) && sub?.status === 'active';
-  if (eligible) reason_codes.push('OPT_OUT_RIGHT_GRANTED');
-
-  return verdict('emandate_cancellation', POL, {
-    eligible, reason_codes, facts_checked, missing_evidence,
-    required_next_step: eligible
-      ? `Call cancel_emandate for ${subscriptionId}. Note: this stops future debits only; past charges need initiate_refund / raise_dispute.`
-      : reason_codes.includes('MANDATE_ALREADY_CANCELLED')
-        ? 'Already cancelled. Confirm to the customer; raise_dispute if a charge hit after cancellation.'
-        : 'Resolve missing evidence before cancelling.',
   });
 }
 
@@ -545,30 +377,6 @@ async function checkFraudLiability(
 }
 
 // Tool wrappers
-const checkLateFeeWaiverTool = defineTool({
-  name: 'check_late_fee_waiver_eligibility',
-  description:
-    'DETERMINISTIC GATE: call before waive_fee. Computes late-fee waiver eligibility from account data (waiver history, on-time %, fee amount). Returns { eligible, reason_codes, facts_checked, missing_evidence, required_next_step, policy_reference }. Do not waive unless eligible=true.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    fee_id: Type.Optional(Type.Number({ description: 'Fee ID from get_fees_and_charges' })),
-  }),
-  execute: async ({ customer_id, fee_id }) =>
-    JSON.stringify(await checkLateFeeWaiver(Number(customer_id), fee_id != null ? Number(fee_id) : undefined)),
-});
-
-const checkCreditLimitIncreaseTool = defineTool({
-  name: 'check_credit_limit_increase_eligibility',
-  description:
-    'DETERMINISTIC GATE: call before adjust_credit_limit. Computes limit-increase eligibility (vintage, CIBIL, missed payments, auto-approval ceiling) from account data. Do not increase unless eligible=true.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    requested_limit: Type.Optional(Type.Number({ description: 'Requested new limit in INR, if the customer named one' })),
-  }),
-  execute: async ({ customer_id, requested_limit }) =>
-    JSON.stringify(await checkCreditLimitIncrease(Number(customer_id), requested_limit != null ? Number(requested_limit) : undefined)),
-});
-
 const checkDuplicateRefundTool = defineTool({
   name: 'check_duplicate_refund_eligibility',
   description:
@@ -579,18 +387,6 @@ const checkDuplicateRefundTool = defineTool({
   }),
   execute: async ({ customer_id, transaction_id }) =>
     JSON.stringify(await checkDuplicateRefund(Number(customer_id), transaction_id ? String(transaction_id) : undefined)),
-});
-
-const checkEmandateCancellationTool = defineTool({
-  name: 'check_emandate_cancellation_eligibility',
-  description:
-    'DETERMINISTIC GATE: call before cancel_subscription. Confirms the standing-instruction / e-mandate exists and is active (RBI opt-out right). Do not cancel unless eligible=true.',
-  parameters: Type.Object({
-    customer_id: Type.Number(),
-    subscription_id: Type.Optional(Type.String({ description: 'Subscription ID from get_subscriptions' })),
-  }),
-  execute: async ({ customer_id, subscription_id }) =>
-    JSON.stringify(await checkEmandateCancellation(Number(customer_id), subscription_id ? String(subscription_id) : undefined)),
 });
 
 const checkEmiConversionTool = defineTool({
@@ -630,6 +426,5 @@ const checkFraudLiabilityTool = defineTool({
 });
 
 export const POLICY_TOOLS = [
-  checkLateFeeWaiverTool, checkCreditLimitIncreaseTool, checkDuplicateRefundTool,
-  checkEmandateCancellationTool, checkEmiConversionTool, checkFraudLiabilityTool,
+  checkDuplicateRefundTool, checkEmiConversionTool, checkFraudLiabilityTool,
 ];
