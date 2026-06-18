@@ -4,9 +4,9 @@ Kriya is an autonomous, customer-facing CardOps copilot for modern Indian credit
 
 ---
 
-## 🛠 Core Capabilities
+## Core Capabilities
 
-Kriya acts as a plain-language translator and execution layer for the **Hyperface Credit Stack**. Below is the complete feature matrix:
+Kriya acts as a plain-language translator and execution layer for the [Hyperface Credit Stack](https://hyperface.stoplight.io/docs/credit-stack-apis/).
 
 ### 1. Accounts & Balances
 * **Live Account Summary**: Fetches current ledger balance, available credit, cash limits, and overall card utilization in real time.
@@ -15,7 +15,7 @@ Kriya acts as a plain-language translator and execution layer for the **Hyperfac
 
 ### 2. Card Management & Security
 * **Emergency Operations**: Instantly executes a card lock (reversible freeze) or permanent hotlisting (irreversible disable) during fraud events.
-* **Usage Controls**: Toggles online transactions, physical POS, contactless (tap-to-pay), ATM withdrawals, and international usage instantly.
+* **Usage Controls**: Toggles online transactions, physical POS, tap to pay, ATM withdrawals, and international usage instantly.
 * **Replacement Routing**: Places card replacement orders (e.g., damaged or stolen cards) with auto-address verification.
 
 ### 3. Transactions & Statements
@@ -41,7 +41,7 @@ Kriya acts as a plain-language translator and execution layer for the **Hyperfac
 
 ---
 
-## 🧠 Agent Architecture
+## Agent Architecture
 
 Kriya coordinates user requests using a durable **Flue Workflow** that routes requests through specialized, cooperating agents:
 
@@ -85,7 +85,7 @@ graph TD
 
 ---
 
-## 📂 Project Directory Structure
+## Project Directory Structure
 
 ```
 ├── app.ts                        # Hono HTTP Server: handles routing, webhooks, and REST APIs
@@ -111,16 +111,16 @@ graph TD
 │   ├── verify.ts                 # Identity checking logic
 │   └── voice.ts                  # Voice mode: Sarvam STT & TTS translation
 ├── ui/                           # Frontend HTML, CSS, and Client JS
-│   ├── start.html / start.css    # Landing page (sticky navbar, visual Hermes flow)
+│   ├── start.html / start.css    # Landing page
 │   ├── chat.html / chat.js       # Live chat client with voice wave animations
 │   └── tickets.html / tickets.js # Kanban board for customer service agents
-└── workflows/                    # Durable orchestrations
+└── workflows/                    # Orchestrations
     └── chat-turn.ts              # Stateful conversation loop
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 * **Node.js** ≥ 22.18
