@@ -275,11 +275,8 @@ export async function getFeesAndCharges(customerId: number, limit = 20) {
     .order('charged_on', { ascending: false }).limit(limit));
 }
 
-export async function getUnwaivedFees(customerId: number) {
-  return rows(supabase.from('fees').select('*').eq('customer_id', customerId).eq('waived', 0)
-    .order('charged_on', { ascending: false }));
-}
-
+// Fees waived in the last `monthsBack` months — used by the late-fee waiver gate
+// to enforce the "no goodwill waiver within 12 months" rule.
 export async function getRecentWaivers(customerId: number, monthsBack = 12) {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - monthsBack);
@@ -287,12 +284,15 @@ export async function getRecentWaivers(customerId: number, monthsBack = 12) {
     .gte('waived_on', cutoff.toISOString().split('T')[0]).order('waived_on', { ascending: false }));
 }
 
+// Waive a single fee (records-on-file action): mark it waived and credit the
+// amount back to the local balance columns. The eligibility decision lives in
+// the late-fee waiver gate / waive_fee tool — this just performs the write.
 export async function waiveFee(feeId: number, reason: string) {
   const { data: fee } = await supabase.from('fees').select('*').eq('id', feeId).eq('waived', 0).maybeSingle();
-  if (!fee) return { success: false, reason: 'Fee not found or already waived' };
+  if (!fee) return { success: false as const, reason: 'Fee not found or already waived' };
 
   const customer = await getCustomer(fee.customer_id as number);
-  if (!customer) return { success: false, reason: 'Customer not found' };
+  if (!customer) return { success: false as const, reason: 'Customer not found' };
 
   const amount = Math.max(0, Math.round(Number(fee.amount ?? 0)));
   const previousOutstanding = Number(customer.outstanding_total ?? 0);
@@ -303,13 +303,12 @@ export async function waiveFee(feeId: number, reason: string) {
     .update({ waived: 1, waived_on: new Date().toISOString(), waiver_reason: reason })
     .eq('id', feeId).eq('waived', 0).select();
   if (error) throw error;
-  if (!upd || upd.length === 0) return { success: false, reason: 'Fee not found or already waived' };
+  if (!upd || upd.length === 0) return { success: false as const, reason: 'Fee not found or already waived' };
 
-  // minimum_due is intentionally left untouched — we no longer synthesise it.
   await supabase.from('customers').update(balances).eq('id', fee.customer_id);
 
   return {
-    success: true,
+    success: true as const,
     fee_id: fee.id, amount, fee_type: fee.fee_type, customer_id: fee.customer_id,
     previous_outstanding_total: previousOutstanding, new_outstanding_total: balances.outstanding_total,
     previous_available_limit: previousAvailable, new_available_limit: balances.available_limit,
@@ -404,24 +403,6 @@ export async function updateCardStatus(customerId: number, status: string): Prom
   return (data?.length ?? 0) > 0;
 }
 
-export async function toggleInternational(customerId: number, enabled: boolean): Promise<boolean> {
-  const { data, error } = await supabase.from('customers').update({ international_enabled: enabled ? 1 : 0 })
-    .eq('id', customerId).select();
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
-
-export async function adjustCreditLimit(customerId: number, newLimit: number): Promise<boolean> {
-  const cust = await getCustomer(customerId);
-  if (!cust) return false;
-  const newAvailable = Math.max(newLimit - cust.outstanding_total, 0);
-  const { data, error } = await supabase.from('customers').update({ credit_limit: newLimit, available_limit: newAvailable })
-    .eq('id', customerId).select();
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
-
-
 // ── Refunds ───────────────────────────────────────────────────────────
 export async function initiateRefund(transactionId: string): Promise<boolean> {
   const { data: txn } = await supabase.from('transactions').select('*').eq('id', transactionId).maybeSingle();
@@ -462,13 +443,6 @@ export async function createEscalation(e: {
   });
   if (error) throw error;
   return id;
-}
-
-export async function listCustomerEscalations(customerId: number) {
-  return rows(supabase.from('escalations')
-    .select('id,category,priority,assigned_team,summary,status,created_at,resolved_at,resolution_notes')
-    .eq('customer_id', customerId)
-    .order('created_at', { ascending: false }));
 }
 
 export async function resolveEscalation(id: string, resolvedBy: string, notes: string): Promise<boolean> {
@@ -592,12 +566,7 @@ export async function getLastAssistantMessage(customerId: number, conversationId
 }
 
 
-// ── Statements, subscriptions, controls ───────────────────────────────
-export async function getStatements(customerId: number, limit = 12) {
-  return rows(supabase.from('statements').select('*').eq('customer_id', customerId)
-    .order('statement_month', { ascending: false }).limit(limit));
-}
-
+// ── Subscriptions ─────────────────────────────────────────────────────
 export async function getSubscriptions(customerId: number) {
   const data = await rows<Record<string, unknown>>(
     supabase.from('subscriptions').select('*').eq('customer_id', customerId),
@@ -610,66 +579,10 @@ export async function getSubscriptions(customerId: number) {
   });
 }
 
-export async function cancelSubscription(customerId: number, subscriptionId: string) {
-  const { data: sub } = await supabase.from('subscriptions').select('*')
-    .eq('id', String(subscriptionId)).eq('customer_id', customerId).maybeSingle();
-  if (!sub) return { success: false as const, reason: 'Subscription not found on this card' };
-  if (sub.status !== 'active') return { success: false as const, reason: 'This subscription is already cancelled' };
-  await supabase.from('subscriptions')
-    .update({ status: 'cancelled', cancelled_on: new Date().toISOString().split('T')[0], next_charge_on: null })
-    .eq('id', String(subscriptionId));
-  return {
-    success: true as const,
-    subscription_id: String(sub.id), merchant: String(sub.merchant), plan: String(sub.plan),
-    amount: Number(sub.amount), billing_cycle: String(sub.billing_cycle),
-    next_charge_avoided: sub.next_charge_on ? String(sub.next_charge_on) : null,
-  };
-}
-
 // ── Disputes / chargebacks ────────────────────────────────────────────
 export async function getDisputes(customerId: number, limit = 20) {
   return rows(supabase.from('disputes').select('*').eq('customer_id', customerId)
     .order('raised_on', { ascending: false }).limit(limit));
-}
-
-export async function createDispute(input: {
-  customer_id: number;
-  transaction_id: string;
-  merchant: string;
-  amount: number;
-  reason: string;
-}): Promise<string> {
-  const { data: maxRow } = await supabase.from('disputes').select('id').order('id', { ascending: false }).limit(1).maybeSingle();
-  const maxN = maxRow ? (parseInt(String(maxRow.id).slice(4), 10) || 0) : 0;
-  const id = `DSP-${String(maxN + 1).padStart(4, '0')}`;
-  const { error } = await supabase.from('disputes').insert({
-    id, customer_id: input.customer_id, transaction_id: input.transaction_id, merchant: input.merchant,
-    amount: input.amount, reason: input.reason, status: 'under_review',
-    raised_on: new Date().toISOString().split('T')[0], resolved_on: null,
-    provisional_credit: 0, resolution_note: 'Under review with the disputes team.',
-  });
-  if (error) throw error;
-  return id;
-}
-
-const CONTROL_COLUMNS = new Set([
-  'online_enabled', 'pos_enabled', 'contactless_enabled', 'atm_enabled', 'international_enabled',
-]);
-
-export async function setCardControl(customerId: number, control: string, enabled: boolean): Promise<boolean> {
-  if (!CONTROL_COLUMNS.has(control)) return false;
-  const { data, error } = await supabase.from('customers').update({ [control]: enabled ? 1 : 0 })
-    .eq('id', customerId).select();
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
-}
-
-export async function setAutopay(customerId: number, enabled: boolean, mode: string): Promise<boolean> {
-  const cleanMode = mode === 'total_due' ? 'total_due' : 'minimum_due';
-  const { data, error } = await supabase.from('customers')
-    .update({ autopay_enabled: enabled ? 1 : 0, autopay_mode: cleanMode }).eq('id', customerId).select();
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────

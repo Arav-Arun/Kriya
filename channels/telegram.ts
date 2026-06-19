@@ -64,7 +64,9 @@ function api(method: string): string {
   return `${API_BASE}/bot${config.telegram.botToken}/${method}`;
 }
 
-// Verify Telegram webhook secret header (constant-time comparison).
+// Verify the Telegram webhook secret header in constant time. With no secret
+// configured the webhook is allowed in local dev but rejected when deployed
+// (fail closed); a configured secret must match exactly.
 export function verifyTelegramSecret(header: string | undefined): boolean {
   const expected = config.telegram.webhookSecret;
   if (!expected) return !config.deployed;

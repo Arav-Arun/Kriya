@@ -13,7 +13,14 @@ import { defineTool, Type } from '@flue/runtime';
 import {
   getCustomer, getTransactions,
   getDisputes, getActiveEmis,
+  getPaymentSummary, getFeesAndCharges, getRecentWaivers,
 } from '../core/queries.ts';
+
+// Goodwill late-fee waiver standard. Exported so the waive_fee action tool
+// enforces the exact same thresholds (single source of truth, no drift).
+export const WAIVER_MAX_FEE_INR = 1000;
+export const WAIVER_MIN_ONTIME_PCT = 80;
+export const WAIVER_LOOKBACK_MONTHS = 12;
 
 interface PolicyVerdict {
   decision: string;
@@ -376,7 +383,85 @@ async function checkFraudLiability(
   });
 }
 
+// Late fee waiver — goodwill standard
+// Eligible only when the on-time record is strong (>= 80%), no waiver was
+// granted in the last 12 months, and the fee is small (<= INR 1,000). This is a
+// records-on-file decision: Kriya has no live fees feed, so it reads local fee
+// and payment rows.
+const POL_WAIVER = `Goodwill late-fee waiver standard (on-time >= ${WAIVER_MIN_ONTIME_PCT}%, fee <= INR ${WAIVER_MAX_FEE_INR}, none in ${WAIVER_LOOKBACK_MONTHS} months)`;
+async function checkLateFeeWaiver(customerId: number, feeId?: number): Promise<PolicyVerdict> {
+  const c = await getCustomer(customerId);
+  const reason_codes: string[] = [];
+  const missing_evidence: string[] = [];
+  const facts_checked: Record<string, unknown> = {};
+
+  if (!c) {
+    missing_evidence.push('customer');
+    return verdict('late_fee_waiver', POL_WAIVER, { missing_evidence, required_next_step: 'Customer not found.' });
+  }
+
+  // Fee under review
+  const fees = await getFeesAndCharges(customerId, 50) as any[];
+  const fee = feeId != null ? fees.find((f) => Number(f.id) === Number(feeId)) : undefined;
+  if (feeId == null) {
+    missing_evidence.push('fee_id');
+  } else if (!fee) {
+    reason_codes.push('FEE_NOT_FOUND');
+  } else {
+    facts_checked.fee_id = fee.id;
+    facts_checked.fee_type = fee.fee_type;
+    facts_checked.fee_amount_inr = Math.round(Number(fee.amount ?? 0));
+    facts_checked.already_waived = fee.waived === 1;
+    if (fee.waived === 1) reason_codes.push('FEE_ALREADY_WAIVED');
+    if (Math.round(Number(fee.amount ?? 0)) > WAIVER_MAX_FEE_INR) reason_codes.push('FEE_EXCEEDS_MAX');
+  }
+
+  // On-time payment record
+  const pay = await getPaymentSummary(customerId);
+  facts_checked.on_time_pct = pay.on_time_pct;
+  facts_checked.payments_on_record = pay.total;
+  if (pay.total === 0) {
+    missing_evidence.push('payment_history');
+  } else if (pay.on_time_pct < WAIVER_MIN_ONTIME_PCT) {
+    reason_codes.push('ON_TIME_BELOW_MIN');
+  }
+
+  // Prior waiver inside the lookback window
+  const recent = await getRecentWaivers(customerId, WAIVER_LOOKBACK_MONTHS) as any[];
+  facts_checked.waivers_last_12_months = recent.length;
+  if (recent.length > 0) reason_codes.push('PRIOR_WAIVER_WITHIN_WINDOW');
+
+  const eligible = isEligible(reason_codes, missing_evidence);
+  const required_next_step = firstNextStep([
+    [missing_evidence.includes('fee_id'), 'Call get_fees_and_charges and pass the fee_id of the fee to review.'],
+    [reason_codes.includes('FEE_NOT_FOUND'), 'That fee was not found on the account. Confirm it with get_fees_and_charges.'],
+    [reason_codes.includes('FEE_ALREADY_WAIVED'), 'This fee has already been waived; no further action.'],
+    [reason_codes.includes('FEE_EXCEEDS_MAX'), `The goodwill waiver covers fees up to INR ${WAIVER_MAX_FEE_INR}. Larger waivers must be escalated to Customer Service.`],
+    [reason_codes.includes('ON_TIME_BELOW_MIN'), `On-time record is ${facts_checked.on_time_pct}% (needs >= ${WAIVER_MIN_ONTIME_PCT}%). Do not waive; explain and offer escalation.`],
+    [reason_codes.includes('PRIOR_WAIVER_WITHIN_WINDOW'), `A waiver was already granted in the last ${WAIVER_LOOKBACK_MONTHS} months. Do not waive again; offer escalation.`],
+    [missing_evidence.includes('payment_history'), 'No payment history on file to assess the on-time record; collect it before deciding.'],
+  ], eligible
+    ? 'Eligible. Confirm with the customer, then call waive_fee with the fee_id.'
+    : 'Not eligible for an automatic goodwill waiver.');
+
+  return verdict('late_fee_waiver', POL_WAIVER, {
+    eligible, reason_codes, facts_checked, missing_evidence, required_next_step,
+  });
+}
+
 // Tool wrappers
+const checkLateFeeWaiverTool = defineTool({
+  name: 'check_late_fee_waiver_eligibility',
+  description:
+    `DETERMINISTIC GATE: call before waive_fee. Applies the goodwill standard — on-time payment record >= ${WAIVER_MIN_ONTIME_PCT}%, no waiver in the last ${WAIVER_LOOKBACK_MONTHS} months, and the fee <= INR ${WAIVER_MAX_FEE_INR}. Pass the fee_id from get_fees_and_charges. Do not waive unless eligible=true.`,
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    fee_id: Type.Optional(Type.Number({ description: 'The fee id from get_fees_and_charges' })),
+  }),
+  execute: async ({ customer_id, fee_id }) =>
+    JSON.stringify(await checkLateFeeWaiver(Number(customer_id), fee_id != null ? Number(fee_id) : undefined)),
+});
+
 const checkDuplicateRefundTool = defineTool({
   name: 'check_duplicate_refund_eligibility',
   description:
@@ -426,5 +511,5 @@ const checkFraudLiabilityTool = defineTool({
 });
 
 export const POLICY_TOOLS = [
-  checkDuplicateRefundTool, checkEmiConversionTool, checkFraudLiabilityTool,
+  checkLateFeeWaiverTool, checkDuplicateRefundTool, checkEmiConversionTool, checkFraudLiabilityTool,
 ];

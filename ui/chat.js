@@ -2,17 +2,16 @@ import { esc, md, inr, fmtWhen, daysUntil, wavFromBlob } from './utils.js';
 const ACTION_RENDER = {
   refund_initiated: (d) => ['green', `Refund credited: ${inr(d?.amount)} from ${d?.merchant ?? 'merchant'}`, d?.new_available_limit != null ? `Available limit is now ${inr(d.new_available_limit)}` : ''],
   refund_rejected: (d) => ['red', 'Refund not possible', d?.reason ?? ''],
+  fee_waived: (d) => ['green', `Late fee waived: ${inr(d?.amount)}`, d?.new_outstanding_total != null ? `Outstanding is now ${inr(d.new_outstanding_total)}` : ''],
+  fee_waiver_rejected: (d) => ['red', 'Fee waiver not possible', d?.reason ?? ''],
   card_blocked: (d) => ['red', 'Card blocked', d?.reason ?? ''],
   card_unblocked: () => ['green', 'Card unblocked', 'Your card is active again'],
   card_hotlisted: () => ['red', 'Card permanently disabled', 'This cannot be undone'],
-  international_toggled: (d) => ['blue', `International usage ${d?.enabled ? 'enabled' : 'disabled'}`, ''],
   emi_converted: (d) => ['blue', `EMI created: ${inr(d?.amount)} over ${d?.tenure} months`, `${inr(d?.emi_amount)}/month`],
   emi_foreclosed: (d) => ['blue', 'EMI foreclosed', `Total payable ${inr((d?.remaining_principal ?? 0) + (d?.foreclosure_charge ?? 0))}`],
   escalation_created: (d) => ['amber', `Sent for specialist review: ${d?.escalation_id ?? ''}`, 'A specialist will take it from here'],
   context_recorded: () => ['blue', 'Account details saved', ''],
   transaction_recorded: (d) => ['blue', `Transaction noted: ${d?.merchant ?? ''} ${inr(d?.amount)}`, ''],
-  card_control_updated: (d) => ['blue', `${String(d?.control ?? '').replace('_enabled', '').replace(/_/g, ' ')} transactions ${d?.enabled ? 'enabled' : 'disabled'}`, 'Card control updated'],
-  autopay_updated: (d) => ['blue', `Autopay ${d?.enabled ? 'enabled' : 'disabled'}`, d?.enabled ? `Mode: ${d?.mode === 'total_due' ? 'full statement' : 'minimum due'}` : ''],
 };
 
 // Starter prompts, paged (3×3 grid per page) so the welcome stays compact while

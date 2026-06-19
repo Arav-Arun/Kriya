@@ -8,9 +8,7 @@ const parse = (v: unknown): Date | null => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-// Merchant → RBI category. insurance / mutual_fund / credit_card_bill get the
-// higher ₹1,00,000 AFA-free recurring limit; everything else ₹15,000.
-const HIGH_LIMIT = new Set(['insurance', 'mutual_fund', 'credit_card_bill']);
+// Merchant text → RBI-style category, inferred best-effort for the e-mandate view.
 const CATEGORY_RULES: Array<[RegExp, string]> = [
   [/netflix|prime|hotstar|spotify|youtube|sony|zee|ott|disney/i, 'ott_streaming'],
   [/insur|\blic\b|term plan|life cover/i, 'insurance'],
@@ -27,11 +25,9 @@ function merchantCategory(merchant: string, plan?: string): string {
   return 'general';
 }
 // General RBI policy (NOT this mandate's verified terms): the AFA-free recurring
-// debit limit by merchant category. Exported for the policy_reference block.
+// debit limit by merchant category. Used by the e-mandate policy_reference block.
 export const AFA_FREE_LIMIT_GENERAL_INR = 15_000;
 export const AFA_FREE_LIMIT_HIGH_INR = 100_000;
-export const afaFreeLimitFor = (category: string): number =>
-  (HIGH_LIMIT.has(category) ? AFA_FREE_LIMIT_HIGH_INR : AFA_FREE_LIMIT_GENERAL_INR);
 
 interface EMandate {
   mandate_id: string;               // internal Kriya reference, NOT a registry id
@@ -105,47 +101,3 @@ export function toEMandate(sub: Record<string, any>): EMandate {
   };
 }
 
-interface CancellationReceipt {
-  internal_reference: string;
-  internal_mandate_reference: string;
-  reference_note: string;
-  subscription_id: string;
-  merchant: string;
-  plan: string | null;
-  amount: number;
-  billing_cycle: string;
-  cancelled_on: string;
-  effective: string;
-  next_debit_cancelled: { on: string; amount: number } | null;
-  future_debits: string;
-  current_period: string;
-  customer_fee_inr: number;
-  past_charges_note: string;
-  confirmation: string;
-}
-
-export function buildCancellationReceipt(
-  mandate: EMandate,
-  nextChargeAvoided: string | null,
-): CancellationReceipt {
-  const today = iso(new Date());
-  const internalReference = `KRIYA-CANCEL-${mandate.subscription_id}-${today.replace(/-/g, '')}`;
-  return {
-    internal_reference: internalReference,
-    internal_mandate_reference: mandate.mandate_id,
-    reference_note: 'These are internal Kriya references for your records, not an official mandate-registry id or receipt number.',
-    subscription_id: mandate.subscription_id,
-    merchant: mandate.merchant,
-    plan: mandate.plan,
-    amount: mandate.amount,
-    billing_cycle: mandate.billing_cycle,
-    cancelled_on: today,
-    effective: 'immediate',
-    next_debit_cancelled: nextChargeAvoided ? { on: nextChargeAvoided, amount: mandate.amount } : null,
-    future_debits: 'revoked; the card will not be auto-debited for this merchant again',
-    current_period: 'any already-paid period stays usable until it ends',
-    customer_fee_inr: 0,
-    past_charges_note: 'This does not refund past charges. Use a refund or dispute for those.',
-    confirmation: `Auto-debit for ${mandate.merchant} cancelled (Kriya internal reference ${internalReference}). No further debits; no cancellation fee.`,
-  };
-}

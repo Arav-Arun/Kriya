@@ -1,7 +1,7 @@
 import { defineTool, Type } from '@flue/runtime';
 import {
   getCustomer, getPaymentHistory, getPaymentSummary,
-  getFeesAndCharges,
+  getFeesAndCharges, getRecentWaivers, waiveFee,
   updateCustomerContext, createCustomerTransaction,
   getActiveEmis, foreclosEmi, createEmi,
   updateCardStatus,
@@ -14,6 +14,7 @@ import {
   toEMandate,
   AFA_FREE_LIMIT_GENERAL_INR, AFA_FREE_LIMIT_HIGH_INR,
 } from './emandates.ts';
+import { WAIVER_MAX_FEE_INR, WAIVER_MIN_ONTIME_PCT, WAIVER_LOOKBACK_MONTHS } from './policy-gates.ts';
 import { assertActionAllowed } from './verify.ts';
 import { tryLinkedRead, linkedLiveSummary } from './provider-tools.ts';
 import { hyperfaceProvider } from '../providers/hyperface.ts';
@@ -580,6 +581,64 @@ export const initiateRefundTool = defineTool({
       new_outstanding_total: after?.outstanding_total,
       message: `Refund credited immediately for INR ${txn.amount}.`,
     });
+  },
+});
+
+export const waiveFeeTool = defineTool({
+  name: 'waive_fee',
+  description:
+    `Waive a late fee / penalty (records-on-file action — Kriya has no live fees feed, so this credits the local balance, not the live card ledger). SENSITIVE: requires card-last-4 verification. Goodwill rules: on-time record >= ${WAIVER_MIN_ONTIME_PCT}%, no waiver in the last ${WAIVER_LOOKBACK_MONTHS} months, and the fee <= INR ${WAIVER_MAX_FEE_INR}. Call check_late_fee_waiver_eligibility first; pass the fee_id from get_fees_and_charges.`,
+  parameters: Type.Object({
+    customer_id: Type.Number(),
+    fee_id: Type.Number({ description: 'The fee id from get_fees_and_charges' }),
+    reason: Type.String({ description: 'Why the fee is being waived (e.g. "goodwill — strong on-time record")' }),
+  }),
+  execute: async ({ customer_id, fee_id, reason }) => {
+    const cid = Number(customer_id);
+    const verificationBlock = await requireVerified(cid, 'waive_fee');
+    if (verificationBlock) return verificationBlock;
+
+    const fid = Number(fee_id);
+    const reject = async (rejectionReason: string) => {
+      await logAction({
+        customer_id: cid,
+        action_type: 'fee_waiver_rejected',
+        action_detail: { fee_id: fid, reason: rejectionReason },
+        policy_reference: 'Goodwill late-fee waiver standard',
+      });
+      return JSON.stringify({ success: false, fee_id: fid, reason: rejectionReason });
+    };
+
+    // Defense in depth: re-enforce the same hard rules as the gate, so the
+    // action can never run outside policy even if the agent skips the gate.
+    const fee = (await getFeesAndCharges(cid, 50) as any[]).find((f) => Number(f.id) === fid);
+    if (!fee) return reject('That fee was not found on this customer account.');
+    if (fee.waived === 1) return reject('This fee has already been waived.');
+    if (Math.round(Number(fee.amount ?? 0)) > WAIVER_MAX_FEE_INR) {
+      return reject(`The goodwill waiver covers fees up to INR ${WAIVER_MAX_FEE_INR}. Escalate larger waivers to Customer Service.`);
+    }
+    const pay = await getPaymentSummary(cid);
+    if (pay.total > 0 && pay.on_time_pct < WAIVER_MIN_ONTIME_PCT) {
+      return reject(`On-time payment record is ${pay.on_time_pct}% (needs >= ${WAIVER_MIN_ONTIME_PCT}%).`);
+    }
+    if ((await getRecentWaivers(cid, WAIVER_LOOKBACK_MONTHS) as any[]).length > 0) {
+      return reject(`A fee waiver was already granted in the last ${WAIVER_LOOKBACK_MONTHS} months.`);
+    }
+
+    const result = await waiveFee(fid, String(reason));
+    if (!result.success) return reject(result.reason);
+
+    await logAction({
+      customer_id: cid,
+      action_type: 'fee_waived',
+      action_detail: {
+        fee_id: fid, amount: result.amount, fee_type: result.fee_type, reason,
+        previous_outstanding_total: result.previous_outstanding_total,
+        new_outstanding_total: result.new_outstanding_total,
+      },
+      policy_reference: 'Goodwill late-fee waiver standard',
+    });
+    return JSON.stringify({ ...result, reason });
   },
 });
 

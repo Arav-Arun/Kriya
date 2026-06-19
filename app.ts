@@ -1,5 +1,5 @@
 // Kriya HTTP surface: the Connect page, the web chat, the chat business API,
-// the channel webhooks (WhatsApp / Telegram / OpenClaw / Hyperface), voice (Sarvam), and
+// the channel webhooks (Telegram / Hyperface), voice (Sarvam), and
 // the Flue mount (workflow dispatch + run event streams). Routing only — all
 // analysis lives in the agents/services. Customer data goes through
 // database/queries.ts (Supabase) and, for phone-linked customers, live
@@ -9,22 +9,24 @@ import { flue } from '@flue/runtime/routing';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// imports from core/queries.ts
 import {
-  getCustomer, getPaymentSummary,
-  createConversation, listConversations, getConversation, getMessages, addMessage,
+  getCustomer,
+  createConversation, listConversations, getConversation, getMessages,
   renameConversation, deleteConversation,
-  listCustomerEscalations, getDisputes, getTransactions, getFeesAndCharges,
-  getSubscriptions, setCardControl, setAutopay, toggleInternational,
-  logAction, getCustomerActionsLog, ProvisioningError,
+  getDisputes, getTransactions,
+  getCustomerActionsLog, ProvisioningError,
   resolveEscalation,
 } from './core/queries.ts';
+
+// app.ts pulls in the DB layer, the env config, voice, both channel adapters, and the card provider. That's literally every subsystem, because app.ts is where they all connect to the outside world."
 import { supabase } from './core/supabase.ts';
 import { config, enforceHostedGuardrails, updateTelegramConfig } from './core/env.ts';
 import { transcribe, synthesize, voiceEnabled } from './services/voice.ts';
 import { telegramAdapter, verifyTelegramSecret, parseTelegramUpdate, requestContact, KRIYA_TELEGRAM_HELP } from './channels/telegram.ts';
 import { handleInbound, identifyByPhone, rememberTelegramContact } from './channels/hermes.ts';
 import { hyperfaceProvider } from './providers/hyperface.ts';
-import { linkedLiveSummary } from './services/provider-tools.ts';
 
 enforceHostedGuardrails();
 
@@ -42,7 +44,7 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
-  '.png': 'image/png',
+  '.png': 'image/png', 
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
@@ -74,31 +76,11 @@ app.get('/assets/*', (c) => {
   return serveFile(filePath) ?? c.notFound();
 });
 
-let cachedBotUsername: string | null = 'kriya_copilot_bot';
-
-async function getTelegramBotUsername(): Promise<string | null> {
-  if (cachedBotUsername) return cachedBotUsername;
-  if (!config.telegram.botToken) return null;
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/getMe`);
-    const data = await res.json() as any;
-    if (data?.ok && data?.result?.username) {
-      cachedBotUsername = data.result.username;
-      return cachedBotUsername;
-    }
-  } catch (err) {
-    console.error('[telegram] failed to fetch bot info:', err);
-  }
-  return 'kriya_copilot_bot';
-}
-
-if (config.telegram.botToken) {
-  getTelegramBotUsername().catch(() => {});
-}
+const TELEGRAM_BOT_USERNAME = 'kriya_copilot_bot';
 
 // Public config for the web surfaces: which channels are live, the demo
 // sign-in number (if any), and whether voice is available.
-app.get('/api/web/config', async (c) => c.json({
+app.get('/api/web/config', (c) => c.json({
   app_base_url: config.appBaseUrl,
   demo_phone: config.demoPhone ?? null,
   voice_enabled: voiceEnabled(),
@@ -106,7 +88,7 @@ app.get('/api/web/config', async (c) => c.json({
     telegram: telegramAdapter.configured,
     hyperface: config.providerMode === 'hyperface_uat' && hyperfaceProvider.configured,
   },
-  telegram_username: await getTelegramBotUsername(),
+  telegram_username: TELEGRAM_BOT_USERNAME,
 }));
 
 // ── Customers ─────────────────────────────────────────────────────────
@@ -150,67 +132,16 @@ app.post('/api/identify', async (c) => {
   return customer ? c.json(publicCustomer(customer)) : c.json({ error: 'Account lookup failed.' }, 500);
 });
 
-app.get('/api/customer/:id/profile', async (c) => {
-  const customer = await getCustomer(Number(c.req.param('id')));
-  if (!customer) return c.json({ error: 'Not found' }, 404);
-  // Phone-linked customers read balance/limits/card status straight from the
-  // card system of record; everyone else stays on records on file.
-  const live = await linkedLiveSummary(customer.id);
-  return c.json({
-    id: customer.id, name: customer.name,
-    source: live ? 'live_provider' : 'records_on_file',
-    card_status: live
-      ? (live.primaryCard?.isHotlisted ? 'hotlisted'
-        : live.primaryCard?.isLocked ? 'blocked'
-        : String(live.primaryCard?.cardStatus ?? customer.card_status).toLowerCase())
-      : customer.card_status,
-    card_last4: customer.card_number_last4,
-    card_variant: customer.card_variant,
-    credit_limit: live ? live.account.approvedCreditLimit : customer.credit_limit,
-    available_limit: live ? live.account.availableCreditLimit : customer.available_limit,
-    outstanding_total: live ? Math.max(0, -live.account.currentBalance) : customer.outstanding_total,
-    minimum_due: customer.minimum_due,
-    due_date: customer.due_date, reward_points: customer.reward_points_balance,
-    cibil_score: customer.cibil_score, kyc_status: customer.kyc_status,
-    international_enabled: customer.international_enabled === 1,
-    online_enabled: customer.online_enabled === 1,
-    pos_enabled: customer.pos_enabled === 1,
-    contactless_enabled: customer.contactless_enabled === 1,
-    atm_enabled: customer.atm_enabled === 1,
-    autopay_enabled: customer.autopay_enabled === 1,
-    autopay_mode: customer.autopay_mode,
-    payment_summary: await getPaymentSummary(customer.id),
-  });
-});
-
 app.get('/api/customer/:id/transactions', async (c) => {
   const customerId = Number(c.req.param('id'));
   if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
   return c.json(await getTransactions(customerId, { limit: 40 }));
 });
 
-app.get('/api/customer/:id/fees', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
-  return c.json(await getFeesAndCharges(customerId, 40));
-});
-
-app.get('/api/customer/:id/subscriptions', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
-  return c.json(await getSubscriptions(customerId));
-});
-
 app.get('/api/customer/:id/actions', async (c) => {
   const customerId = Number(c.req.param('id'));
   if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
   return c.json(await getCustomerActionsLog(customerId));
-});
-
-app.get('/api/customer/:id/escalations', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
-  return c.json(await listCustomerEscalations(customerId));
 });
 
 app.get('/api/escalations', async (c) => {
@@ -261,42 +192,6 @@ app.post('/api/escalations/:id/resolve', async (c) => {
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
-});
-
-app.post('/api/customer/:id/controls', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  if (!(await getCustomer(customerId))) return c.json({ error: 'Not found' }, 404);
-  const body = await c.req.json().catch(() => null) as { control: string; enabled: boolean; mode?: string } | null;
-  if (!body) return c.json({ error: 'Body required' }, 400);
-
-  const { control, enabled, mode } = body;
-  if (control === 'international') {
-    await toggleInternational(customerId, enabled);
-    await logAction({
-      customer_id: customerId,
-      action_type: 'international_toggled',
-      action_detail: { enabled },
-      policy_reference: 'Card Controls Config'
-    });
-  } else if (control === 'autopay') {
-    await setAutopay(customerId, enabled, mode || 'total_due');
-    await logAction({
-      customer_id: customerId,
-      action_type: 'autopay_updated',
-      action_detail: { enabled, mode: mode || 'total_due' },
-      policy_reference: 'Autopay Settings'
-    });
-  } else {
-    const ok = await setCardControl(customerId, control, enabled);
-    if (!ok) return c.json({ error: 'Invalid control' }, 400);
-    await logAction({
-      customer_id: customerId,
-      action_type: 'card_control_updated',
-      action_detail: { control, enabled },
-      policy_reference: 'Card Controls Config'
-    });
-  }
-  return c.json({ success: true });
 });
 
 // ── Resolution records (disputes / chargebacks) ───────────────────────
@@ -351,19 +246,6 @@ app.get('/api/customer/:id/conversations/:conversationId/messages', async (c) =>
   })));
 });
 
-app.post('/api/customer/:id/conversations/:conversationId/messages', async (c) => {
-  const customerId = Number(c.req.param('id'));
-  const conversationId = Number(c.req.param('conversationId'));
-  if (!(await getConversation(customerId, conversationId))) return c.json({ error: 'Not found' }, 404);
-  const body = await c.req.json().catch(() => null) as { content?: string } | null;
-  if (!body?.content) return c.json({ error: 'Content required' }, 400);
-
-  const meta = { source: 'operator' };
-  const activeConversationId = await addMessage(customerId, 'assistant', String(body.content), meta, conversationId);
-  return c.json({ success: true, conversation_id: activeConversationId });
-});
-
-
 // ── Voice (Sarvam STT/TTS) — the chat's voice mode ────────────────────
 // Transcribe a recorded clip → text the chat sends as a turn.
 app.post('/api/voice/transcribe', async (c) => {
@@ -412,10 +294,13 @@ app.post('/api/voice/speak', async (c) => {
 // ── Channel webhooks (Hermes) ─────────────────────────────────────────
 
 
-// Telegram Bot API: a single webhook receives every Update. Auth is the secret
-// token echoed in the X-Telegram-Bot-Api-Secret-Token header (set at
-// setWebhook time). ACK fast; Hermes processes text asynchronously. An
-// unrecognised chat is first asked to share its registered number — Hermes is
+// Telegram Bot API: a single webhook receives every Update. Auth is the shared
+// secret token Telegram echoes in the X-Telegram-Bot-Api-Secret-Token header
+// (registered at setWebhook time); verifyTelegramSecret compares it in constant
+// time. When no secret is configured the webhook is open in local dev but
+// rejected once deployed — and enforceHostedGuardrails refuses to boot a
+// deployed instance without one. ACK fast; Hermes processes text asynchronously.
+// An unrecognised chat is first asked to share its registered number — Hermes is
 // phone-keyed, so identity comes from the (Telegram-verified) shared contact.
 app.post('/api/channels/telegram/webhook', async (c) => {
   if (!telegramAdapter.configured) return c.json({ ok: true }); // ignore until configured
@@ -500,9 +385,8 @@ app.post('/api/channels/telegram/setup', async (c) => {
       return c.json({ error: `Failed to set webhook: ${whData?.description ?? 'Telegram API error'}` }, 400);
     }
 
-    // Persist to env and update memory
+    // Persist to env
     updateTelegramConfig(botToken, webhookSecret);
-    cachedBotUsername = username;
 
     return c.json({ ok: true, username });
   } catch (err: any) {

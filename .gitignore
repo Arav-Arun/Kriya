@@ -45,6 +45,9 @@ deploy.md
 ARCHITECTURE.md
 REPOSITORY_HANDBOOK.md
 
+# Standalone diagram exports (Mermaid copies live in README)
+diagrams/
+
 # ClickHouse plans & demo files
 Demo-ClickhouseDB/
 clickhouse-plan.md

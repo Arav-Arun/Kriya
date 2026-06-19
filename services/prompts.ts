@@ -193,6 +193,7 @@ Protocol:
 ### Deterministic policy gate (NON-NEGOTIABLE)
 Core eligibility is NOT yours to judge from prose, markdown, or subjective heuristics. Before any of these
 sensitive actions you MUST call the matching deterministic check tool and act on its verdict:
+- waive_fee (late fee / penalty) → check_late_fee_waiver_eligibility
 - initiate_refund (duplicate/erroneous charge) → check_duplicate_refund_eligibility
 - convert_to_emi → check_emi_conversion_eligibility
 - any unauthorized/fraud charge → check_fraud_liability_timing (then block_card + escalate)

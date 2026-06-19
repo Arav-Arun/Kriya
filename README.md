@@ -1,6 +1,6 @@
 # Kriya: Autonomous Credit-Card Copilot
 
-Kriya is an autonomous, customer-facing CardOps copilot for modern Indian credit card programs. Built on a durable agentic workflow engine, Kriya enables cardholders to manage accounts, configure controls, convert purchases to EMI, and resolve disputes in plain language (or via voice) while enforcing strict regulatory policy gates.
+Kriya is an autonomous, customer-facing CardOps copilot for modern Indian credit card programs. Built on a durable agentic workflow engine, Kriya enables cardholders to check live accounts, lock or replace cards, convert purchases to EMI, redeem rewards, and resolve refund/chargeback and fraud cases in plain language (or via voice) while enforcing strict regulatory policy gates.
 
 ---
 
@@ -76,10 +76,116 @@ graph TD
 ```
 
 ### Specialized Agents:
-1. **Triage Agent**: Classifies intent, detects urgency, and extracts key entities (e.g. amounts, dates, channels).
+1. **Triage Agent**: Classifies intent into a category, detects urgency, and routes the turn `direct` vs `analysis`.
 2. **Investigation Agent**: Conducts read-only queries against the database and card ledger APIs to build context.
-3. **Policy Agent**: Matches user requests against deterministic rules (e.g., limit check, maximum waiver policies).
-4. **Resolution Agent**: Enforces identity checks, validates policy gates, compiles visual cards, and triggers ledger modifications.
+3. **Policy Agent**: Searches the local Markdown policy corpus and returns advisory eligibility guidance, SLAs, and key rules. The binding deterministic checks live in the policy gates, not here.
+4. **Resolution Agent**: Enforces identity checks, runs the deterministic policy gates, compiles visual cards, and triggers ledger modifications.
+
+---
+
+## Architecture & Workflow Diagrams
+
+### Complete architecture
+
+Seven layers: clients and channels reach the Hono HTTP server, which routes through Hermes and the Flue workflow runtime to four LLM agents (each calling OpenAI) and a set of deterministic tools, all backed by Supabase, the Flue database, and external services.
+
+```mermaid
+flowchart TB
+    subgraph Clients["Clients and channels"]
+        Web[Web chat]
+        TG[Telegram]
+        Voice[Voice]
+        Ops[Operator board]
+    end
+    App["app.ts — Hono server<br/>pages · REST · voice · webhook · flue() mount"]
+    Hermes["Hermes<br/>phone-keyed identity router"]
+    Flue["Flue runtime — chat-turn<br/>durable orchestration + SSE"]
+    subgraph Agents["Agents — LLM-driven"]
+        Triage
+        Investigation
+        Policy
+        Resolution
+    end
+    OpenAI["OpenAI<br/>gpt-4o-mini"]
+    subgraph Tools["Tools and deterministic logic"]
+        Tlocal[tools.ts]
+        Tlive[provider-tools.ts]
+        Tgate[policy-gates.ts]
+        Tverify[verify.ts]
+        Tknow[knowledge.ts]
+    end
+    subgraph Data["Data stores and external"]
+        SB[(Supabase<br/>app + audit)]
+        FDB[(Flue DB)]
+        HF[Hyperface]
+        Sarvam[Sarvam STT/TTS]
+        TGAPI[Telegram API]
+    end
+    Web --> App
+    TG --> App
+    Voice --> App
+    Ops --> App
+    App -->|webhook / identify| Hermes
+    App -->|web| Flue
+    Hermes --> Flue
+    Flue --> Agents
+    Agents <-->|structured · streaming · tools| OpenAI
+    Agents --> Tools
+    Tlocal --> SB
+    Tlive --> HF
+    Tgate --> SB
+    Tverify --> SB
+    Flue --> FDB
+    App --> Sarvam
+    App --> TGAPI
+```
+
+### Full agentic workflow (one chat turn)
+
+A turn enters the Flue `chat-turn` workflow, is routed by Triage, optionally fans out to parallel Investigation and Policy agents, then reaches Resolution, whose tool-calling loop reads data, verifies identity, runs a deterministic gate, executes a local or live action with an audit log, and streams the final reply. Any exception creates an escalation.
+
+```mermaid
+flowchart TB
+    Start["Flue chat-turn — turn starts<br/>load customer · persist message · load context"]
+    D1{"Verification or<br/>pending follow-up?"}
+    Triage["Triage agent — OpenAI<br/>route · category · urgency"]
+    D2{"Route = analysis?"}
+    Inv["Investigation — OpenAI<br/>read tools: Supabase / Hyperface"]
+    Pol["Policy — OpenAI<br/>search policies/*.md"]
+    Res["Resolution agent — OpenAI<br/>streaming · question + findings"]
+    subgraph Loop["Resolution tool-calling loop"]
+        Read["Read tools<br/>get_* / live_*"]
+        D3{"Sensitive action?"}
+        Verify["verify — card last-4<br/>valid 30 min"]
+        Gate["policy gate — check_*_eligibility<br/>deterministic"]
+        Act["execute action — local / live<br/>+ write actions_log"]
+    end
+    Stream["Stream final reply + UI cards"]
+    Final["Collect actions · derive status · persist + emit"]
+    Chan["Final result — channel<br/>web: text + cards · Telegram: text"]
+    Fail["On exception — escalation + safe apology"]
+    Start --> D1
+    D1 -->|no| Triage
+    D1 -->|yes, skip| Res
+    Triage --> D2
+    D2 -->|direct| Res
+    D2 -->|analysis| Inv
+    D2 -->|analysis| Pol
+    Inv --> Res
+    Pol --> Res
+    Res --> Read
+    Read --> D3
+    D3 -->|no| Stream
+    D3 -->|yes| Verify
+    Verify --> Gate
+    Gate --> Act
+    Act --> Stream
+    Stream --> Final
+    Final --> Chan
+    Start -.->|exception| Fail
+```
+
+> Standalone SVG copies of both diagrams render in `diagrams/` (kept local — see `.gitignore`).
 
 ---
 
@@ -100,11 +206,10 @@ graph TD
 │   ├── queries.ts                # Main database access layers (Supabase)
 │   ├── env.ts                    # Hosted guardrails and configuration
 │   └── supabase.ts               # Supabase client credentials wrapper
-├── database/                     # DB schemas and migrations
 ├── providers/                    # Core banking / credit ledger integrations
 │   └── hyperface.ts              # UAT endpoint bindings for the Hyperface Credit Stack
 ├── services/                     # Business services
-│   ├── policy-gates.ts           # Rules engine for fee waivers, limits, and disputes
+│   ├── policy-gates.ts           # Deterministic gates: late-fee waiver, duplicate refund, EMI conversion, fraud liability
 │   ├── verify.ts                 # Identity checking logic
 │   └── voice.ts                  # Voice mode: Sarvam STT & TTS translation
 ├── ui/                           # Frontend HTML, CSS, and Client JS
@@ -142,11 +247,18 @@ graph TD
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-key
    OPENAI_API_KEY=your-openai-api-key
+   SENTINEL_MODEL=openai/gpt-4o-mini
    SARVAM_API_KEY=your-sarvam-voice-api-key
    KRIYA_PROVIDER_MODE=hyperface_uat
+   HYPERFACE_TENANT_ID=your-hyperface-tenant-id
+   HYPERFACE_ACCESS_KEY=your-hyperface-access-key
    HYPERFACE_SECRET_KEY=your-hyperface-access-secret
    HYPERFACE_ISSUER_SECRET_KEY=your-issuer-master-key
+   HYPERFACE_PROGRAM_ID=your-hyperface-program-id
+   # Set to false to keep all live card mutations gated (reads still work)
+   HYPERFACE_ALLOW_MUTATIONS=true
    ```
+   > See `.env.example` for the full set of variables, including `DATABASE_URL`/`KRIYA_DEPLOYED` for hosted deployments and the Telegram webhook keys.
 
 ### Execution
 * **Development Server (Hot reloading)**:

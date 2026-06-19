@@ -8,7 +8,7 @@ import {
   getEmandatesTool,
   blockCardTool, unblockCardTool, hotlistCardTool,
   convertToEmiTool, forecloseEmiTool,
-  initiateRefundTool,
+  initiateRefundTool, waiveFeeTool,
   createEscalationTool,
   setConversationStateTool,
 } from '../services/tools.ts';
@@ -33,7 +33,7 @@ export default createAgent(() => ({
     ...LIVE_READ_TOOLS, ...LIVE_ACTION_TOOLS, ...PRESENTATION_TOOLS, ...VERIFICATION_TOOLS,
     blockCardTool, unblockCardTool, hotlistCardTool,
     convertToEmiTool, forecloseEmiTool,
-    initiateRefundTool,
+    initiateRefundTool, waiveFeeTool,
     createEscalationTool,
     setConversationStateTool,
   ],
