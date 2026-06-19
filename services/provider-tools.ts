@@ -1050,7 +1050,18 @@ export const showCardTool = defineTool({
     }
 
     if (kind === 'emi_offer' || kind === 'emi') {
-      const res = await hyperfaceProvider.emiConfig(accountId, { emiType: 'TOTAL_OUTSTANDING' });
+      // The provider's EMI config requires a positive amount (or a txn ref id):
+      // emiType alone is rejected with "Either TxnRefId or Positive Amount must
+      // be provided". To offer a TOTAL_OUTSTANDING conversion, source the current
+      // outstanding live (same figure the balance card uses) and pass it as the
+      // amount.
+      const live = await linkedLiveSummary(cid);
+      if (!live) return liveUnavailableJson('EMI offer');
+      const outstanding = Math.max(0, Math.round(-live.account.currentBalance));
+      if (outstanding <= 0) {
+        return JSON.stringify({ source: 'live_provider', shown: 'none', note: 'There is no outstanding balance to convert to EMI right now.' });
+      }
+      const res = await hyperfaceProvider.emiConfig(accountId, { amount: outstanding, emiType: 'TOTAL_OUTSTANDING' });
       if (!res.ok) return liveUnavailableJson('EMI offer', res.code === 'PERMISSION_PENDING' ? MSG.PERMISSION_PENDING_NOTE : res.message);
       const plans = emiPlans(res.data);
       if (plans.length === 0) {

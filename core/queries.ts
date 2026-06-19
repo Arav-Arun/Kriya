@@ -1,8 +1,7 @@
 // All Kriya app state lives in Supabase Postgres. Every function here
-// reads/writes through the supabase-js client (service role). Portfolio
-// analytics, customer search, and the conversation list are server-side RPC
-// functions (see migrations); the rest use the query builder, with small
-// per-customer aggregations computed in JS.
+// reads/writes through the supabase-js client (service role). The conversation
+// list is a server-side RPC (list_conversations); the rest use the query
+// builder, with small per-customer aggregations computed in JS.
 import { supabase } from './supabase.ts';
 
 // ── Small helpers ─────────────────────────────────────────────────────
