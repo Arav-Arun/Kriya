@@ -44,6 +44,7 @@ deploy.md
 # Local codebase reading guides
 ARCHITECTURE.md
 REPOSITORY_HANDBOOK.md
+CODE_WALKTHROUGH.md
 
 # Standalone diagram exports (Mermaid copies live in README)
 diagrams/

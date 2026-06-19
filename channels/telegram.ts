@@ -19,9 +19,9 @@ export const KRIYA_TELEGRAM_HELP =
   + "• **Transactions** — \"show my recent transactions\", or ask about one charge\n"
   + "• **Statements & bills** — \"send my last statement\", \"what's my next bill?\"\n"
   + "• **EMI** — \"what are my EMI options?\", convert a purchase or your outstanding\n"
-  + "• **Card controls** — block/unblock, and online/contactless/ATM/international toggles\n"
+  + "• **Card security** — block or unblock your card, report it lost, or order a replacement\n"
   + "• **Disputes & refunds** — flag a wrong or duplicate charge\n"
-  + "• **Subscriptions** — list autopays/mandates and cancel one\n\n"
+  + "• **Subscriptions** — see the autopays and mandates running on your card\n\n"
   + "Lost your card? Just say \"block my card\" — I do it instantly, no questions first.";
 
 // Render assistant markdown as Telegram-safe HTML: escape the markup-significant
